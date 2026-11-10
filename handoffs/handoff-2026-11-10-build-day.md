@@ -68,3 +68,7 @@ disable test crons, verify the domain + SSL, deploy the new landing page to live
 - **Hand-over to the body corporate manager** (Edward 11-10): the committee is the user; jobs (insurance claim,
   notice, levy query, records request, contractor) go to the manager as packs carrying the deadline; a manager
   inbox across buildings. Open: per-job email link vs the manager's own sign-in. Ask Michael: self-managed or a paid manager?
+- **Alatai HAS a body corporate manager** (Edward, end of session): the committee checks paperwork is complete and
+  compliant, then sends it to the manager. So the **manager hand-over is Alatai's core flow** → build it FIRST tomorrow
+  (before the five features). Claude's call: start with a per-job email + private link (like the lawyer pack; no sign-in
+  for an outside firm), add a manager sign-in/inbox later. Ask Michael: which firm, and who there handles Alatai.

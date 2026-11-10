@@ -9,6 +9,14 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
 - **Success looks like:** Michael's committee and building manager run Altai's requests through it, on time and on record.
 
 ## Next
+00. **Live version (Production) created 2026-11-10**: pages + function + tables deployed (`https://bodycorp-7006497428.catalystserverless.com.au`).
+   Still to do on live: (a) env vars on the live function (id 694000000424769) — copy from catalyst-config.json, PORTAL_URL
+   → the live address; Claude Code auto mode blocks Claude writing production secrets, so Edward approves or pastes them
+   (Console → Production → Serverless → bodycorp_api → Configuration); (b) `/admin/bootstrap` Altai on live, then
+   `/admin/topics {from_seed}` + brand keys; (c) both crons on live pointing at the LIVE URL; (d) DNS at VentraIP for
+   `bodycorp.barebaysidelabs.com`: CNAME `bodycorp` → `catalyst.cs.zohohost.com.au` and CNAME
+   `7b5e1b4471d6a340d4d5ac3e140dbdf2.bodycorp` → `catalyst.cs.zohohost.com.au`, then Verify + Request SSL in
+   Console → Production → Cloud Scale → Domain Mappings; (e) go-live check (workspaces/03_release).
 0. **Decided 2026-11-10 (Edward): the address is `bodycorp.barebaysidelabs.com`**, mapped to the live copy in the
    Catalyst console; DNS lines go in VentraIP (barebaysidelabs.com). Email sends from a barebaysidelabs.com address
    with the domain verified in Catalyst Mail (SPF include ADDED to the existing Zoho Mail SPF line, never a second

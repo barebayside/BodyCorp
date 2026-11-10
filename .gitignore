@@ -6,3 +6,7 @@ catalyst-config.json
 __pycache__/
 .pytest_cache/
 docs/design/references/*.png
+
+# Client data stays on OneDrive, never in git (only the blank template is tracked)
+buildings/*
+!buildings/_template/

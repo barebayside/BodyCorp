@@ -5,3 +5,4 @@ node_modules/
 catalyst-config.json
 __pycache__/
 .pytest_cache/
+docs/design/references/*.png

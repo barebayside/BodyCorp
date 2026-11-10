@@ -3,9 +3,12 @@
 2026-11-10 · Edward (owner) · builds on `2026-11-10-bodycorp-portal-design.md` and
 `2026-11-10-committee-pipeline-design.md` · law: `docs/compliance/qld-committee-rules.md`
 
-**Status: designed, code prepared but NOT WIRED.** `ai_review.py` and `ai_client.py` exist with tests
-(`tests/test_ai_review.py`); nothing in `main.py`, `store.py` or the pages calls them yet. Wiring waits for the
-committee pipeline work (stages, buttons, if-missed in the topic Definition JSON) to land.
+**Status: wired 2026-11-10, not yet deployed.** `ai.py` (routes, storage, daily job), tables created on the test
+copy, pages in `portal.js` (`#/ai`, `#/ask`, `#/ai/review/<id>`, `#/ai/history`, `#/settings/ai`), tests in
+`tests/test_ai_routes.py`. **Off per building until switched on** in Settings → AI; approver defaults to the portal
+owner (the SUPPORT_EMAIL user). Column names differ from the tables below where the Data Store refused reserved
+words: `Rule_Proposals.Change` → `Proposed_Json`, `Edited_Change` → `Edited_Json`, `AI_Usage.Month` →
+`Usage_Month`, `Batch` → `Is_Batch`. Added: `Doc_Versions.Batch_Id` and `Error` (scan transcription).
 
 ## Why
 

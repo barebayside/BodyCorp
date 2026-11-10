@@ -34,6 +34,8 @@ LOGIN_CODES, SESSIONS = "Login_Codes", "Sessions"
 FAILURES, MAIL_QUEUE = "Failures", "Mail_Queue"
 MOTIONS, BALLOTS, MEETINGS, TASKS = "Motions", "Ballots", "Meetings", "Tasks"
 PUSH_SUBS = "Push_Subs"
+DOC_VERSIONS, RULE_REVIEWS, RULE_PROPOSALS = "Doc_Versions", "Rule_Reviews", "Rule_Proposals"
+TOPIC_VERSIONS, AI_USAGE, AI_QUESTIONS = "Topic_Versions", "AI_Usage", "AI_Questions"
 
 _TEXT = {"Brand", "Settings", "Definition", "Answers", "Steps", "Decision", "Files", "Body", "Words", "Eligible",
          "Tally", "Agenda", "Attendance", "Minutes", "Detail", "Endpoint", "Sub_Keys"}
@@ -79,6 +81,29 @@ SCHEMA = {
     # Web Push devices (2026-11-10). "Keys" is a reserved word in the Data Store, hence Sub_Keys.
     PUSH_SUBS: {"required": ("User_Id", "Building_Id", "Endpoint", "Sub_Keys"), "unique": (),
                 "sizes": {"Endpoint": TEXT_MAX, "Sub_Keys": TEXT_MAX, "User_Agent": 255}},
+    # The AI compliance helper (2026-11-10, ai.py). "Change", "Month" and "Batch" are reserved words, hence
+    # Proposed_Json, Edited_Json, Usage_Month and Is_Batch. Long text (document text, the clause diff, raw batch
+    # results) lives in Stratus under ai/<building id>/..., never in these columns.
+    DOC_VERSIONS: {"required": ("Building_Id", "Kind", "Title", "File_Key", "Status"), "unique": (),
+                   "sizes": {"Kind": 20, "Title": 255, "Version_Label": 100, "Dealing_No": 100, "File_Key": 255,
+                             "Text_Key": 255, "Text_Source": 20, "Sha256": 64, "Status": 20, "Batch_Id": 100,
+                             "Error": 255}},
+    RULE_REVIEWS: {"required": ("Building_Id", "Old_Doc_Id", "New_Doc_Id", "Status"), "unique": (),
+                   "sizes": {"Status": 20, "Batch_Id": 100, "Diff_Key": 255, "Error": 255}},
+    RULE_PROPOSALS: {"required": ("Building_Id", "Review_Id", "Seq", "Kind", "Title", "Citations", "Status"),
+                     "unique": (),
+                     "sizes": {"Kind": 20, "Topic_Key": 60, "Title": 255, "Why": TEXT_MAX, "Citations": TEXT_MAX,
+                               "Proposed_Json": TEXT_MAX, "Edited_Json": TEXT_MAX, "Unconfirmed_Reason": 255,
+                               "Problems": TEXT_MAX, "Status": 20, "Decision_Note": 255}},
+    TOPIC_VERSIONS: {"required": ("Building_Id", "Topic_Key", "Version", "Definition", "Effective_From", "Source"),
+                     "unique": (),
+                     "sizes": {"Topic_Key": 60, "Definition": TEXT_MAX, "Source": 20, "Proposal_Ids": 255,
+                               "Note": 255}},
+    AI_USAGE: {"required": ("Building_Id", "Usage_Month", "Kind", "Model", "Cost_Usd", "Cost_Aud"), "unique": (),
+               "sizes": {"Usage_Month": 7, "Kind": 20, "Model": 40, "Request_Id": 100}},
+    AI_QUESTIONS: {"required": ("Building_Id", "User_Id", "Question", "Status"), "unique": (),
+                   "sizes": {"Question": TEXT_MAX, "Answer": TEXT_MAX, "Citations": TEXT_MAX, "Model": 40,
+                             "Status": 20, "Batch_Id": 100}},
 }
 
 

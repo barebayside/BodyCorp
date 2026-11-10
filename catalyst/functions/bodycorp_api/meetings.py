@@ -136,7 +136,7 @@ def _motion(db, building, meeting_id, words, case_id=None, exempt=""):
            "Words": words[:votes.MAX_WORDS], "Status": "pending", "Exempt": exempt, "Animal": False}
     if case_id:
         row["Case_Id"] = int(case_id)
-        topic = topics.get(db, building, (db.get(store.CASES, case_id) or {}).get("Topic_Key")) or {}
+        topic = topics.for_case(db, building, db.get(store.CASES, case_id) or {}) or {}
         if (topic.get("vote") or {}).get("animal"):
             row.update(Animal=True, Exempt="animal")
     return db.insert(store.MOTIONS, row)
@@ -432,7 +432,7 @@ def _secretary(db, building):
 
 
 def _answers_line(db, building, case_row):
-    topic = topics.get(db, building, case_row.get("Topic_Key")) or {}
+    topic = topics.for_case(db, building, case_row) or {}
     answers = cases._json(case_row.get("Answers"), {})
     parts = []
     for field in topic.get("fields") or []:
@@ -495,7 +495,7 @@ def draft_minutes(db, building, row, now):
                 owner_motions.append("   {} ({}) — submitted {} by {}{}".format(
                     case_row.get("Ref"), case_row.get("Title"), lodged, lodger.get("Name") or lodger.get("Email") or "",
                     "; decision period extended" if stages.is_extended(
-                        topics.get(db, building, case_row.get("Topic_Key")) or {}, case_row) else ""))
+                        topics.for_case(db, building, case_row) or {}, case_row) else ""))
     lines.append("4. Owner motions: " + ("" if owner_motions else "none"))
     lines += owner_motions
     lines.append("5. Animal requests: " + ("" if animals else "none"))

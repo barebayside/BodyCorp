@@ -243,7 +243,7 @@ def test_cron_applies_deemed_and_keeps_its_answer_shape(world):
     case = _case(world)
     body, status = world.call("POST", "/cron/reminders", headers={"X-Cron-Key": "cron-key"},
                               now=NOW + timedelta(days=30))
-    assert status == 200 and set(body) == {"ok", "sent", "queue"}
+    assert status == 200 and set(body) == {"ok", "sent", "queue", "ai"}
     assert world.db.get(store.CASES, case["id"])["Status"] == "decided"
 
 

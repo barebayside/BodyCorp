@@ -213,7 +213,7 @@ def open_vocm(db, building, ctx, words, case_id=None, exempt="", now=None):
             raise bad("This request is already decided.")
         if any(m.get("Status") == "open" for m in open_for_case(db, building, case_row["ROWID"])):
             raise bad("There's already a vote open on this request.")
-        topic = topics.get(db, building, case_row.get("Topic_Key")) or {}
+        topic = topics.for_case(db, building, case_row) or {}
         animal = bool((topic.get("vote") or {}).get("animal"))
         row.update(Case_Id=int(case_row["ROWID"]), Animal=animal, Exempt="animal" if animal else exempt)
     closes = store.parse_dt(case_row.get("Due_At")) if row["Animal"] and case_row else None
@@ -336,7 +336,7 @@ def apply_to_case(db, building, row, result, counts, now):
     case_row = db.get(store.CASES, row["Case_Id"])
     if not case_row or case_row.get("Status") in ("decided", "closed"):
         return
-    rule = (topics.get(db, building, case_row.get("Topic_Key")) or {}).get("vote") or {}
+    rule = (topics.for_case(db, building, case_row) or {}).get("vote") or {}
     outcome = {"passed": rule.get("if_passed", "approved"), "defeated": rule.get("if_defeated"),
                "lost": rule.get("if_defeated"), "not_agreed": rule.get("if_no_result", "not_agreed"),
                "deemed_approved": "deemed_approved"}.get(result)

@@ -34,6 +34,13 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
    people positions (Members → Give someone a role: Chair, Secretary, Treasurer, Committee member) and, once the CMS
    arrives, records the regulation module and the secretary's contact address (Board → Who does what). Until the
    module is recorded admins see "Module not recorded — committee rules are guidance only".
+0e. **AI compliance helper: wired 2026-11-10, not yet deployed** (spec
+   `docs/superpowers/specs/2026-11-10-ai-compliance-helper-design.md`). Tables `Doc_Versions`, `Rule_Reviews`,
+   `Rule_Proposals`, `Topic_Versions`, `AI_Usage`, `AI_Questions` and column `Cases.Topic_Version` already exist on the
+   test copy. To turn it on: deploy functions and client, run the one live check (`ai_smoke.py`, under a cent), then
+   Edward as admin opens Settings → AI helper → switches it on for Altai. **It is OFF until then** (when on, the
+   CMS, by-laws and committee questions go to Anthropic, outside Australia). Still open for Edward: who approves
+   (default: you), who may ask (committee only now), the monthly limit (A$20 now).
 1. **Edward: verify the email sender.** Catalyst console (signed in as edward@barebaysidelabs.com) → BodyCorp →
    Cloud Scale → Mail → Email configuration → `edward@barebaysidelabs.com` → Verify (code is in your inbox, from
    noreply@notifications.zohocatalyst.com.au). Until then no email goes out, so nobody can sign in by code.
@@ -85,6 +92,20 @@ per building · the building's own web address · pull out the reusable kit.
   `#/meeting/<id>`, `#/minutes/<id>`, `#/tasks`, `#/committee`.
 - The daily reminders now also settle votes whose 21 days are up, decide cases past a deadline whose topic says
   "deemed approved" or "not agreed" (and email the resident), and add tasks and draft minutes due to the digests.
+- AI compliance helper (2026-11-10, `ai.py`). Off per building until an admin switches it on (Settings → AI helper,
+  `#/settings/ai`); while off its routes answer 403 and nothing is sent. When on: committee roles and admins get a
+  "By-laws" menu (`#/ai`): upload a new CMS/by-laws version (PDF with text is read free; a scan goes to the AI by
+  batch and a person ticks "text checked"), compare two versions (clause changes free, estimate shown, Start sends
+  step 1), the review (`#/ai/review/<id>`: if-missed change first, the clause quoted, current → proposed in plain
+  words, form preview, Approve/Edit/Reject; refused ones greyed), Apply (versions in force from the registration
+  date; open requests keep the version they were lodged under, `Cases.Topic_Version`), history with Undo
+  (`#/ai/history`), and "Ask about your by-laws" (`#/ask`). Approver per building: owner (default, the SUPPORT_EMAIL
+  user), secretary, or committee_vote (Apply opens a vote outside a meeting; applies only if it passes).
+  Budget: `AI_MONTHLY_CAP_AUD` (20) per building, A$ at `AI_AUD_PER_USD` (1.55); checked before every call (402);
+  reaching it = one `ai_cap` failure + one email to admins a month; 80% = one warning email. The daily reminders
+  also collect finished AI batches and copy versions whose date has come into the live request types.
+  Long text lives in Stratus `ai/<building id>/...`. Live check: `py -3.9 <scratchpad>/ai_smoke.py` (one Haiku call).
+  Headless AI screens: `py -3.9 <scratchpad>/mock/ai_backend.py catalyst/client 8795` (fake AI, no API calls).
 - Headless check of the committee screens: `py -3.9 <scratchpad>/mock/mock_api.py catalyst/client 8790 --real`
   runs the real function code over the tests' fake store (sign in with any seeded email, code 123456).
-- Tests: `py -3.9 -m pytest -q tests` (84 pass before the committee view; 122 with it, plus other sessions' tests). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.
+- Tests: `py -3.9 -m pytest -q tests` (84 pass before the committee view; 122 with it; 211 with the AI helper wired). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.

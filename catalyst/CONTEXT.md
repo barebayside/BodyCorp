@@ -29,5 +29,17 @@ failure (Catalyst returns an empty 200 when a function runs out of memory).
 - A deploy pushes `catalyst-config.json` env vars, replacing what's set in the console.
 - `Result` is a reserved word: Create_Column refuses the whole batch ("Column name cannot contain reserved
   keywords") and creates none of it. The vote result column is `Motions.Tally`.
+- More reserved words (2026-11-10): `Change`, `Month`, `Batch`. Hence `Rule_Proposals.Proposed_Json` /
+  `Edited_Json` and `AI_Usage.Usage_Month` / `Is_Batch`. Try a short single-column batch first if unsure.
+- The AI helper reads the law file from `functions/bodycorp_api/law_qld.md`, a COPY of
+  `docs/compliance/qld-committee-rules.md` (the function can't see `docs/`). Edit the docs file, then copy it over;
+  a test fails while they differ.
+- AI tests never call Anthropic: `ai.make_client` is replaced by a fake. The one live check is
+  `ai_smoke.py` (one Haiku call, under a cent), run by hand on the test copy.
+- Any document text, clause diff or raw AI batch result goes to Stratus under `ai/<building id>/...`, never in a
+  10,000-character column. A request type is still one `Definition` text column, so it must stay under 10,000.
+- Once a request type has rows in `Topic_Versions`, change it through a version (admin edits record one
+  automatically, `topics.note_version`); the daily job copies the version in force into `Topics`, so a direct
+  edit of `Topics` alone would be overwritten.
 - The fake store keeps whatever type `update` was given (an int id stays an int); Catalyst gives strings back.
   Compare ids as `str(...)` in tests.

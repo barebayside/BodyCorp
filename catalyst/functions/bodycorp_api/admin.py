@@ -163,7 +163,7 @@ def add_units(db, ctx, building, units):
 UPGRADE_KEYS = ("stages", "deadline", "vote", "after_decision")
 
 
-def upgrade_topics(db, ctx, building, seed):
+def upgrade_topics(db, ctx, building, seed, now=None):
     """
     Bring an already-loaded building's topics up to the seed's pipeline (POST /admin/topics {from_seed}).
     Only the pipeline keys (stages, deadline, vote, after_decision) are copied over; labels, fields and
@@ -180,6 +180,8 @@ def upgrade_topics(db, ctx, building, seed):
             current = json.loads(rows[item["key"]].get("Definition") or "{}")
             merged = dict(current, **{k: item["definition"][k] for k in UPGRADE_KEYS if k in item["definition"]})
             topics.save(db, building, item["key"], merged, have[item["key"]]["active"], have[item["key"]]["sort"])
+            topics.note_version(db, building, item["key"], merged, have[item["key"]]["active"], "seed",
+                                ctx["user_id"], now or store.utc_now(), "Seed upgrade")
             counts["updated"] += 1
         else:
             topics.save(db, building, item["key"], item["definition"], True, item.get("sort", 0))
@@ -194,7 +196,7 @@ def upgrade_topics(db, ctx, building, seed):
     return counts
 
 
-def save_topic(db, ctx, building, key, definition, active, sort):
+def save_topic(db, ctx, building, key, definition, active, sort, now=None):
     _admin(ctx)
     try:
         sort = int(sort or 0)
@@ -203,5 +205,8 @@ def save_topic(db, ctx, building, key, definition, active, sort):
     if len(json.dumps(definition)) > store.TEXT_MAX:
         raise bad("That topic is too long.")
     topics.save(db, building, key, definition, active, sort)
+    # Once a type has versions (the AI helper), an admin edit is a new version in force now.
+    topics.note_version(db, building, str(key or "").strip().lower(), definition, active, "admin", ctx["user_id"],
+                        now or store.utc_now(), "Edited by an admin")
     return topics.all_topics(db, building)
 

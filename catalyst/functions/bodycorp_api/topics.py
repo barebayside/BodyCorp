@@ -75,11 +75,11 @@ def public(topic):
     return {k: topic[k] for k in ("key", "label", "intro", "fields", "draft", "deadline")}
 
 
-def for_member(db, building, ctx):
-    """Active topics this person may use. Handlers see every topic, to know what residents see."""
+def for_member(db, building, ctx, now=None):
+    """Active topics (as in force now) this person may use. Handlers see every topic, to know what residents see."""
     relations = ctx["relations"]
     out = []
-    for topic in all_topics(db, building):
+    for topic in current(db, building, now or store.utc_now()):
         if topic["active"] and (ctx["can"]["handle"] or relations & set(topic["audience"])):
             out.append(public(topic))
     return out
@@ -178,6 +178,114 @@ def _check_stages(definition):
     after = definition.get("after_decision")
     if after and after not in keys:
         raise bad("after_decision must be one of the stages.")
+
+
+# ---------- versions: a request is pinned to the rules in force when it was lodged ----------
+#
+# Topic_Versions holds every version of a request type (made by the AI helper's Apply, an undo, or an admin
+# edit once a type has history). Cases.Topic_Version is the version in force when a case was lodged; a case
+# without one (lodged before any history) uses the "baseline" version, the lowest. A type with no versions
+# at all is simply its Topics row, as before.
+
+def _stamp(now):
+    return now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _live_version(row):
+    return row.get("Active") not in (False, "false", 0, "0")
+
+
+def versions_of(db, building, key=None):
+    where = {"Building_Id": int(building["id"])}
+    if key:
+        where["Topic_Key"] = key
+    return db.find(store.TOPIC_VERSIONS, where)
+
+
+def in_force(versions, key, stamp):
+    """The version row of `key` in force at `stamp` (UTC text), or None: latest Effective_From <= stamp."""
+    live = [v for v in versions if v.get("Topic_Key") == key and _live_version(v)
+            and str(v.get("Effective_From"))[:19] <= stamp]
+    return max(live, key=lambda v: (str(v["Effective_From"])[:19], int(v["Version"]))) if live else None
+
+
+def as_topic(live, version_row, key):
+    """A topic (the from_row shape) carrying a version's settings, with the live row's id and sort."""
+    fake = {"Topic_Key": key, "Definition": version_row.get("Definition"),
+            "Active": version_row.get("Topic_Active") not in (False, "false", 0, "0"),
+            "Sort": (live or {}).get("sort") or 0, "ROWID": (live or {}).get("id") or version_row.get("ROWID")}
+    topic = from_row(fake)
+    topic["version"] = int(version_row["Version"])
+    return topic
+
+
+def pinned(live, versions, row):
+    """The topic as it was for this case (see above). `live` is get()'s answer, `versions` that type's rows."""
+    key = row.get("Topic_Key")
+    mine = [v for v in versions if v.get("Topic_Key") == key]
+    if not mine:
+        return live
+    want = store.as_id(row.get("Topic_Version"))
+    if want:
+        match = [v for v in mine if int(v["Version"]) == want]
+        if match:
+            return as_topic(live, match[0], key)
+    first = min(mine, key=lambda v: int(v["Version"]))
+    return as_topic(live, first, key)
+
+
+def for_case(db, building, row):
+    """The topic a case runs under (its pinned version), or None."""
+    key = row.get("Topic_Key")
+    return pinned(get(db, building, key), versions_of(db, building, key), row)
+
+
+def case_lookup(db, building):
+    """A function row -> pinned topic, reading the building's topics and versions once (for boards and jobs)."""
+    every = {t["key"]: t for t in all_topics(db, building)}
+    versions = versions_of(db, building)
+    return lambda row: pinned(every.get(row.get("Topic_Key")), versions, row)
+
+
+def for_new_case(db, building, key, now):
+    """(topic in force now, its version number or None) for a request being lodged."""
+    live = get(db, building, key)
+    version = in_force(versions_of(db, building, key), key, _stamp(now))
+    if version is None:
+        return live, None
+    return as_topic(live, version, key), int(version["Version"])
+
+
+def current(db, building, now):
+    """Every topic as in force now: the Topics row, or the version in force if the daily job hasn't copied it yet."""
+    versions = versions_of(db, building)
+    out = []
+    for topic in all_topics(db, building):
+        version = in_force(versions, topic["key"], _stamp(now))
+        out.append(as_topic(topic, version, topic["key"]) if version else topic)
+    have = {t["key"] for t in out}
+    for key in sorted({v.get("Topic_Key") for v in versions} - have):
+        version = in_force(versions, key, _stamp(now))
+        if version:
+            out.append(as_topic(None, version, key))
+    return sorted(out, key=lambda t: (t["sort"], t["label"]))
+
+
+def note_version(db, building, key, definition, active, source, user_id, now, note=""):
+    """
+    Once a type has versions, an edit made outside the AI helper (an admin, a seed upgrade) is recorded as a
+    new version in force now, so the daily job never copies an older version back over it.
+    """
+    versions = versions_of(db, building, key)
+    if not versions:
+        return None
+    row = {"Building_Id": int(building["id"]), "Topic_Key": key,
+           "Version": max(int(v["Version"]) for v in versions) + 1, "Definition": json.dumps(definition),
+           "Effective_From": _stamp(now), "Source": source, "Topic_Active": active is not False, "Active": True,
+           "Note": str(note or "")[:255]}
+    if store.as_id(user_id):
+        row["Created_By"] = int(user_id)
+    return db.insert(store.TOPIC_VERSIONS, row)
 
 
 def save(db, building, key, definition, active=True, sort=0):

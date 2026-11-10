@@ -1,6 +1,6 @@
 """
 A thin client for the Anthropic Messages API, using `requests` only (no SDK, to keep the
-Catalyst function small). NOT WIRED YET: nothing in main.py calls it. Design:
+Catalyst function small). Used by ai.py (ai.make_client; tests replace it with a fake). Design:
 docs/superpowers/specs/2026-11-10-ai-compliance-helper-design.md
 
 WHAT IT DOES

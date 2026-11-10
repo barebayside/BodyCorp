@@ -137,7 +137,7 @@ def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None
     unit_id = str(store.as_id(unit_id) or "")
     if unit_id not in ctx["unit_ids"]:
         raise forbidden("You can't send requests for that unit yet.")
-    topic = topics.get(db, building, str(topic_key or ""))
+    topic, version = topics.for_new_case(db, building, str(topic_key or ""), now)
     relations = {m.get("Relation") for m in ctx["memberships"]
                  if m.get("Status") == "approved" and str(m.get("Unit_Id")) == unit_id}
     if not topic or not topic["active"] or not relations & set(topic["audience"]):
@@ -156,6 +156,8 @@ def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None
     if due:
         row["Due_At"] = store.fmt_dt(due)
     row["Stage"] = stages.of(topic)[0].get("key") or ""
+    if version:
+        row["Topic_Version"] = version          # open requests keep the rules they were lodged under
     case_row = _insert_with_ref(db, building, row)
     saved, failed = _save_files(db, building, case_row, decoded)
     if saved:
@@ -263,7 +265,7 @@ def detail(db, building, ctx, case_id, now=None):
     now = now or store.utc_now()
     row = load(db, building, ctx, case_id)
     is_handler = handles(ctx, row)
-    topic = topics.get(db, building, row.get("Topic_Key")) or {"label": row.get("Title"), "fields": []}
+    topic = topics.for_case(db, building, row) or {"label": row.get("Title"), "fields": []}
     events_rows = db.find(store.EVENTS, {"Case_Id": int(row["ROWID"])})
     ids = {str(e.get("User_Id")) for e in events_rows} | {str(row.get("User_Id"))}
     names = {i: db.get(store.USERS, i) or {} for i in sorted(ids)}
@@ -346,7 +348,7 @@ def _email_handlers(db, building, row, heading, lines, topic=None, now=None, pus
     To whoever handles the case. The first line is always what happens if nobody decides in time.
     Their phones get `push_body` (or the heading) right after the emails.
     """
-    topic = topic or topics.get(db, building, row.get("Topic_Key")) or {}
+    topic = topic or topics.for_case(db, building, row) or {}
     first = stages.missed_line(topic, row, now or store.utc_now())
     body = mailer.page(building, heading, ([first] if first else []) + list(lines), "Open the request",
                        link=case_link(building, row))
@@ -445,7 +447,7 @@ def apply_decision(db, building, row, outcome, reasons, conditions, by, now, ext
     decision = dict({"outcome": outcome, "reasons": reasons, "conditions": conditions, "by": by,
                      "at": store.fmt_dt(now)}, **(extra or {}))
     change = {"ROWID": row["ROWID"], "Status": "decided", "Decision": json.dumps(decision)}
-    topic = topics.get(db, building, row.get("Topic_Key")) or {}
+    topic = topics.for_case(db, building, row) or {}
     if topic.get("after_decision"):
         change["Stage"] = topic["after_decision"]
     db.update(store.CASES, change)

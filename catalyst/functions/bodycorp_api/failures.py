@@ -12,6 +12,8 @@ KINDS
     mail_gave_up        a queued email still failed after 5 tries
     error               an unexpected crash in a request (route + error type only)
     push                a phone notification couldn't be delivered (host + status only)
+    ai                  the AI helper couldn't start or collect something (a batch, a comparison)
+    ai_cap              a building's monthly AI budget was reached: nothing was sent (once a month)
     heartbeat_*         not a failure: a "this job ran" stamp, written already resolved
 
 `log` never raises. A failure while recording a failure is written to the

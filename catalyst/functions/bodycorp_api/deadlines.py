@@ -92,9 +92,9 @@ def remind(db, now_utc, extra=None):
             labels = labels if labels is not None else buildings.unit_labels(db, building)
             if every is None:
                 import topics
-                every = {t["key"]: t for t in topics.all_topics(db, building)}
+                every = topics.case_lookup(db, building)
             for email in handler_emails(db, building, row.get("Handler")):
-                digests.setdefault(email, []).append(_line(left, row, labels, every.get(row.get("Topic_Key")),
+                digests.setdefault(email, []).append(_line(left, row, labels, every(row),
                                                            now_utc))
         for email, lines in ((extra(building) if extra else None) or {}).items():
             digests.setdefault(email, []).extend(lines)

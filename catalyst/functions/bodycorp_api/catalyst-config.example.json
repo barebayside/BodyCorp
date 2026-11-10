@@ -12,6 +12,9 @@
       "MAIL_FROM_NAME": "BodyCorp",
       "PORTAL_URL": "https://bodycorp-7006497428.development.catalystserverless.com.au/app/portal.html",
       "SUPPORT_EMAIL": "support@example.com",
+      "ANTHROPIC_API_KEY": "replace-with-the-anthropic-api-key",
+      "AI_MONTHLY_CAP_AUD": "20",
+      "AI_AUD_PER_USD": "1.55",
       "VAPID_PUBLIC_KEY": "replace-with-the-base64url-public-key",
       "VAPID_PRIVATE_KEY": "replace-with-the-base64url-private-key",
       "VAPID_SUBJECT": "mailto:edward@barebaysidelabs.com"

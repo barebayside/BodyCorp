@@ -189,7 +189,7 @@ def test_validate_all_keeps_invalid_ones_marked(seed_topics, sources):
     rows = ai_review.validate_all([edit([change("intro", "Fine")]), edit([change("deadline.dayz", 1)])],
                                   seed_topics, sources, review_id=7, building_id=1)
     assert [r["Status"] for r in rows] == ["proposed", "invalid"]
-    assert all(len(r["Change"]) <= 10000 for r in rows)
+    assert all(len(r["Proposed_Json"]) <= 10000 for r in rows)
 
 
 def test_a_persons_edit_is_checked_too(seed_topics, sources):
@@ -225,7 +225,7 @@ def test_cap_reached_stops_before_sending():
 
 
 def test_spent_counts_this_month_only():
-    rows = [{"Month": "2026-11", "Cost_Aud": 1.5}, {"Month": "2026-10", "Cost_Aud": 9}, {"Month": "2026-11",
+    rows = [{"Usage_Month": "2026-11", "Cost_Aud": 1.5}, {"Usage_Month": "2026-10", "Cost_Aud": 9}, {"Usage_Month": "2026-11",
                                                                                        "Cost_Aud": "0.25"}]
     assert ai_review.spent_aud(rows, ai_review.month_of(NOW)) == pytest.approx(1.75)
 
@@ -350,7 +350,7 @@ def test_map_then_proposals_from_batch_results(seed_topics, sources):
     answers, errors, usage = ai_review.read_batch(
         [{"custom_id": "rev3-pet", "result": {"type": "succeeded", "message": message}},
          {"custom_id": "rev3-new", "result": {"type": "expired"}}], 1, NOW, "review_propose")
-    assert errors == {"rev3-new": "expired"} and usage[0]["Batch"] is True
+    assert errors == {"rev3-new": "expired"} and usage[0]["Is_Batch"] is True
     rows = ai_review.validate_all(answers["rev3-pet"]["proposals"], seed_topics, sources, 3, 1)
     assert rows[0]["Status"] == "proposed"
 

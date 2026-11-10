@@ -1,6 +1,9 @@
 """
-The AI compliance helper: pure functions, NOT WIRED YET (nothing in main.py calls this).
+The AI compliance helper: pure functions. Wired by ai.py (routes, storage, the daily job).
 Design: docs/superpowers/specs/2026-11-10-ai-compliance-helper-design.md
+
+COLUMN NAMES: "Change", "Month" and "Batch" are reserved words in the Data Store, so the rows built here use
+Rule_Proposals.Proposed_Json / Edited_Json and AI_Usage.Usage_Month / Is_Batch.
 
 Two jobs:
   1. BY-LAW / CMS REVIEW. A lawyer's new CMS or by-laws arrive. We split old and new into clauses and diff
@@ -128,6 +131,13 @@ def find_clause(clauses_by_id, cited):
     return None
 
 
+def as_clauses(value):
+    """Clauses as given ([{id, heading, text}], e.g. read back from Stratus, maybe corrected by a person), or split from text."""
+    if isinstance(value, list):
+        return [c for c in value if isinstance(c, dict) and c.get("id") and str(c.get("text") or "").strip()]
+    return split_clauses(value)
+
+
 def diff_clauses(old_text, new_text, moved_at=0.9):
     """
     Old and new document text -> the clauses that changed, in new-document order, then removals:
@@ -135,7 +145,7 @@ def diff_clauses(old_text, new_text, moved_at=0.9):
     Unchanged clauses are left out. A removed clause whose words reappear (90% alike) under a new
     number is one "moved" change, not a removal plus an addition.
     """
-    old, new = split_clauses(old_text), split_clauses(new_text)
+    old, new = as_clauses(old_text), as_clauses(new_text)
     old_by, new_by = clause_map(old), clause_map(new)
     out = []
     for c in new:
@@ -509,7 +519,7 @@ def _stored_change(clean):
 def check_edit(row, edited, current_topics, sources):
     """
     A person's edit of a proposal (POST /ai/proposal/decide {decision: "edit"}) is checked exactly like the
-    model's: same citations, the new changes (or new settings). Returns (Edited_Change JSON, problems).
+    model's: same citations, the new changes (or new settings). Returns (Edited_Json text, problems).
     `edited` is {"changes": [{path, op, value, clause}]} or {"after": {...settings}}.
     """
     raw = {"kind": row.get("Kind"), "topic_key": row.get("Topic_Key"), "title": row.get("Title"),
@@ -550,14 +560,30 @@ def validate_all(raw_proposals, current_topics, sources, review_id=None, buildin
     rows = []
     for seq, raw in enumerate(raw_proposals or [], 1):
         clean, problems = validate_proposal(raw, current_topics, sources)
-        rows.append({"Building_Id": building_id, "Review_Id": review_id, "Seq": seq, "Kind": clean["kind"] or "",
-                     "Topic_Key": clean["topic_key"], "Title": clean["title"] or "(no title)",
-                     "Why": clean["why"][:MAX_STORED],
-                     "Citations": json.dumps(clean["citations"])[:MAX_STORED],
-                     "Change": json.dumps(_stored_change(clean)),
+        citations, change = _fit_json(clean["citations"]), json.dumps(_stored_change(clean))
+        if citations is None:
+            citations, problems = "[]", problems + ["Too many quotes to store; ask for a shorter proposal."]
+        if len(change) > MAX_STORED:
+            change, problems = "{}", problems + ["The change is too long to store."]
+        rows.append({"Building_Id": building_id, "Review_Id": review_id, "Seq": seq, "Kind": (clean["kind"] or "")[:20],
+                     "Topic_Key": clean["topic_key"][:60], "Title": clean["title"] or "(no title)",
+                     "Why": clean["why"][:MAX_STORED], "Citations": citations, "Proposed_Json": change,
                      "Unconfirmed": clean["unconfirmed"], "Unconfirmed_Reason": clean["unconfirmed_reason"][:255],
-                     "Problems": json.dumps(problems), "Status": "invalid" if problems else "proposed"})
+                     "Problems": _fit_json(problems) or "[]", "Status": "invalid" if problems else "proposed"})
     return rows
+
+
+def _fit_json(items):
+    """A list as JSON text that fits a 10,000-character column, dropping whole items from the end; None if none fit."""
+    items = list(items or [])
+    if not items:
+        return "[]"
+    while items:
+        text = json.dumps(items)
+        if len(text) <= MAX_STORED:
+            return text
+        items = items[:-1]
+    return None
 
 
 # ----------------------------------------------------------------------------------------------------- prompts
@@ -767,7 +793,7 @@ def month_of(now):
 
 
 def spent_aud(usage_rows, month):
-    return round(sum(float(r.get("Cost_Aud") or 0) for r in usage_rows if r.get("Month") == month), 4)
+    return round(sum(float(r.get("Cost_Aud") or 0) for r in usage_rows if r.get("Usage_Month") == month), 4)
 
 
 def check_budget(spent, estimate_aud, cap, month):
@@ -785,9 +811,9 @@ def usage_row(building_id, kind, model, response, batch, now, user_id=None, ref_
     """An AI_Usage row for one finished call."""
     tokens = ai_client.usage_of(response)
     usd = ai_client.cost_usd(model, tokens, batch)
-    return {"Building_Id": building_id, "Kind": kind, "Model": model, "Month": month_of(now),
+    return {"Building_Id": building_id, "Kind": kind, "Model": str(model)[:40], "Usage_Month": month_of(now),
             "Input_Tokens": tokens["input"], "Cache_Write_Tokens": tokens["write_5m"] + tokens["write_1h"],
-            "Cache_Read_Tokens": tokens["read"], "Output_Tokens": tokens["output"], "Batch": bool(batch),
+            "Cache_Read_Tokens": tokens["read"], "Output_Tokens": tokens["output"], "Is_Batch": bool(batch),
             "Cost_Usd": usd, "Cost_Aud": ai_client.aud(usd), "User_Id": user_id, "Ref_Id": ref_id,
             "Request_Id": str((response or {}).get("id") or "")[:100]}
 
@@ -820,8 +846,7 @@ def ask(client, question, building_docs, law_text, spent, cap, now, building_id=
     Raises BudgetReached before sending anything if the cap would be passed.
     """
     month = month_of(now)
-    sources = {k: clause_map(v) for k, v in building_docs.items()}
-    sources["law"] = law_text
+    sources = question_sources(building_docs, law_text)
     usage, out = [], {"escalated": False, "batch_request": None, "label": GUIDANCE}
 
     first = question_payload(question, building_docs, law_text)
@@ -861,6 +886,17 @@ def ask(client, question, building_docs, law_text, spent, cap, now, building_id=
     return finish_escalation(response_json(response), sources, dict(out, usage=usage))
 
 
+def question_sources(building_docs, law_text):
+    """{"cms": {clause: text}, "bylaws": {...}, "law": str}. One combined CMS + by-laws document answers for both."""
+    sources = {k: clause_map(v) for k, v in building_docs.items() if v}
+    if "cms" not in sources and "bylaws" in sources:
+        sources["cms"] = sources["bylaws"]
+    if "bylaws" not in sources and "cms" in sources:
+        sources["bylaws"] = sources["cms"]
+    sources["law"] = law_text
+    return sources
+
+
 def finish_escalation(answer, sources, out=None):
     """Sonnet's answer (sync, or from a batch result) -> the same shape `ask` returns."""
     problems = check_answer(answer, sources)
@@ -880,13 +916,13 @@ def start_review(old_text, new_text, current_topics, law_text, building_name, sp
     The estimate covers the map AND the worst-case proposal step, so a review never stops half way for money.
     """
     changes = diff_clauses(old_text, new_text)
-    context = review_context(split_clauses(old_text), split_clauses(new_text), current_topics, building_name)
+    context = review_context(as_clauses(old_text), as_clauses(new_text), current_topics, building_name)
     first = map_payload(law_text, context, changes)
     worst_next = propose_payload(law_text, context, "x", "\n".join(c["new"] or c["old"] for c in changes))
     focus_count = len(current_topics) + 1
     estimate = ai_client.aud(estimate_usd(first, True) + focus_count * estimate_usd(worst_next, True))
     check_budget(spent, estimate, cap, month_of(now))
-    return {"changes": changes, "estimate_aud": round(estimate, 2),
+    return {"changes": changes, "estimate_aud": round(estimate, 2), "context": context,
             "batch_requests": [{"custom_id": "rev{}-map".format(review_id), "params": first}]}
 
 
@@ -965,7 +1001,7 @@ def plan_apply(proposals, current_topics, versions, doc_registered_on, building_
             rows.append(_version_row(building_id, key, number, definition, "2000-01-01 00:00:00", "baseline", [],
                                      doc_id, user_id, True))
         for p in items:
-            change = json.loads(p.get("Edited_Change") or p.get("Change") or "{}")
+            change = json.loads(p.get("Edited_Json") or p.get("Proposed_Json") or "{}")
             if p["Kind"] == "edit_topic":
                 definition = apply_changes(definition, change.get("changes") or [])
             elif p["Kind"] == "new_topic":
@@ -1006,8 +1042,11 @@ def plan_undo(versions, key, now, user_id=None):
     return {"insert": row}
 
 
-def due_promotions(versions, current_topics, now):
-    """For the daily job: request types whose version in force today differs from the live Topics row."""
+def due_promotions(versions, current_topics, now, current_active=None):
+    """
+    For the daily job: request types whose version in force today differs from the live Topics row, in its
+    settings or (when `current_active` {key: bool} is given) in whether it is offered at all (a retirement).
+    """
     stamp = now.strftime("%Y-%m-%d %H:%M:%S")
     out = []
     for key in sorted({v["Topic_Key"] for v in versions}):
@@ -1015,9 +1054,10 @@ def due_promotions(versions, current_topics, now):
         if live is None:
             continue
         definition = json.loads(live["Definition"])
-        if definition != current_topics.get(key):
-            out.append({"key": key, "definition": definition, "active": live.get("Topic_Active") not in (False, "false"),
-                        "version": int(live["Version"])})
+        active = live.get("Topic_Active") not in (False, "false")
+        moved = current_active is not None and key in current_active and current_active[key] != active
+        if definition != current_topics.get(key) or moved:
+            out.append({"key": key, "definition": definition, "active": active, "version": int(live["Version"])})
     return out
 
 

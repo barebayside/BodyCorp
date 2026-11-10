@@ -16,7 +16,9 @@ BodyCorp API: one function behind the portal page.
                     stages, deadlines and vote rules)
     every day   ->  /cron/reminders (key): retry queued email, settle votes whose time is up, decide cases
                     whose deadline passed (deemed approved / not agreed), then the due-soon digests (cases,
-                    tasks, minutes), then a heartbeat
+                    tasks, minutes), then the AI helper's part (ai.daily: copy request-type versions whose date
+                    has come into Topics, apply reviews whose committee vote passed, collect finished AI batches,
+                    warn admins at 80% of the AI budget), then a heartbeat
                 ->  /cron/check (key): retry queued email, look for trouble, email ONE digest (health.py)
     trouble     ->  /failures (admins: their building; product admin: ?all=1), /failures/resolve
     watching    ->  /status (public): alive, and when the self-check last ran
@@ -62,6 +64,38 @@ COMMITTEE ROUTES (2026-11-10; law: docs/compliance/qld-committee-rules.md)
     POST /tasks {title, detail, due_date, assignee_user_id | assignee_position, motion_id?, case_id?,
                  meeting_id?} -> {task};  POST /task/done {id, done} -> {task}
 
+AI COMPLIANCE HELPER (2026-11-10; ai.py, ai_review.py, ai_client.py; spec
+docs/superpowers/specs/2026-11-10-ai-compliance-helper-design.md)
+    OFF per building until an admin switches it on (Buildings.Settings.ai.enabled); while off every /ai route
+    but GET/POST /ai/settings and GET /ai/usage answers 403 "AI isn't switched on for this building".
+    Committee roles and admins only (residents and the building manager get 403); another building's ids 404.
+    Over the month's budget: 402, nothing sent, one Failures row of kind ai_cap and one email to the admins.
+    GET  /ai/settings                -> {settings: {enabled, approver, monthly_cap_aud, default_cap_aud}, budget,
+                                         notice, approvers, can_edit}
+    POST /ai/settings {enabled, approver: owner|secretary|committee_vote, monthly_cap_aud}   (admin)
+    GET  /ai/usage                   -> {month, spent_aud, cap_aud, left_aud, warn, stopped, rows}
+    GET  /ai/docs                    -> {docs, can_manage, kinds};  GET /ai/doc {id} -> {doc, clauses, can_manage}
+    GET  /ai/doc/file {id}           the PDF
+    POST /ai/docs {kind: cms|bylaws|cms_bylaws, title, version_label, registered_on, dealing_no,
+                   file: {name, data}}  -> {doc, warning?}   (admin or approver; a scan goes to the AI by batch)
+    POST /ai/doc/text {id, text? | clauses?, checked?, registered_on?}  -> {doc}
+    GET  /ai/reviews                 -> {reviews}
+    POST /ai/reviews {old_doc_id, new_doc_id, confirm?}  -> {changes, estimate_aud, budget, fits, review}
+    GET  /ai/review {id}             -> {review, changes, proposals: [... changes in plain words, if_missed,
+                                         before_form, after_form, previews, problems, invalid], new_doc,
+                                         registered_text, open_cases_pinned, lodged_since_registration,
+                                         approved_count, can_decide, can_apply, approver, vote, guidance}
+    POST /ai/review/check {id}       "Check now" (the daily job does the same)
+    POST /ai/proposal/decide {id, decision: approve|edit|reject, edited?, note}   (the approver)
+    POST /ai/review/apply {id}       -> {versions, effective_from} or, approver committee_vote, {voting, motion_id}
+    GET  /ai/versions {topic_key?}   -> {topics} or {versions, in_force, can_undo, open_cases}
+    POST /ai/versions/undo {topic_key}   -> {withdrawn} (not yet in force) or {version} (restores the one before)
+    POST /ai/ask {question}          -> {status, answer, citations, label, model, escalated, unconfirmed, question}
+    GET  /ai/questions               -> {questions}
+    GET /me also carries ai: {enabled, approver, see, ask, manage, decide, admin} for the page.
+    Requests are pinned: Cases.Topic_Version is the request-type version in force when it was lodged
+    (topics.for_case); every case screen, button, deadline and vote reads that version.
+
 EVERY ANSWER
     JSON with "ok": true or false. 400 bad input, 401 not signed in, 403 not allowed,
     404 not found, which is also the answer for a case or document the caller may not see.
@@ -77,6 +111,9 @@ ENVIRONMENT (catalyst-config.json)
     PORTAL_URL      the portal page, for links in emails
     SUPPORT_EMAIL   the product's support address: gets the daily check's digest, and
                     (if also an admin somewhere) sees every building's failures
+    ANTHROPIC_API_KEY   the AI helper's key (never printed; unset = every AI call refused)
+    AI_MONTHLY_CAP_AUD  the default monthly AI budget per building in A$ (Settings -> AI overrides it)
+    AI_AUD_PER_USD      A$ per US$1 for the budget sums (1.55)
     VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
                     phone notifications (push.py). The same keys on the test copy and the live
                     site: new keys silently cut off every phone that turned notifications on.
@@ -89,6 +126,7 @@ import re
 from flask import Request, make_response
 
 import admin
+import ai
 import auth
 import buildings
 import cases
@@ -196,8 +234,9 @@ def cron_reminders(c):
     votes.settle_all(c.db, c.now)          # a vote whose 21 days are up gets its result first...
     pipeline.apply_deemed(c.db, c.now)     # ...then any case still undecided past its deadline
     sent = deadlines.remind(c.db, c.now, lambda b: _due_extras(c.db, b, c.now))
+    helper = ai.daily(c.db, c.now)         # versions whose date has come, finished AI batches, cap warnings
     failures.heartbeat(c.db, failures.HEARTBEAT_REMINDERS, "Reminders ran: {} digest(s) sent.".format(sent))
-    return {"sent": sent, "queue": queue}
+    return {"sent": sent, "queue": queue, "ai": helper}
 
 
 def _due_extras(db, building, now):
@@ -225,7 +264,7 @@ def get_status(c):
 # ---------- me and people ----------
 
 def get_me(c):
-    return people.me(c.db, c.ctx)
+    return dict(people.me(c.db, c.ctx), ai=ai.me_flags(c.ctx))
 
 
 def set_name(c):
@@ -269,7 +308,7 @@ def post_roles(c):
 def get_topics(c):
     if not people.is_member(c.ctx):
         raise forbidden("You'll see the forms once your unit is approved.")
-    return {"topics": topics.for_member(c.db, c.building, c.ctx)}
+    return {"topics": topics.for_member(c.db, c.building, c.ctx, c.now)}
 
 
 def post_case(c):
@@ -479,6 +518,12 @@ def push_unsubscribe(c):
     return push.unsubscribe(c.db, c.building, c.user, c.body)
 
 
+# ---------- the AI compliance helper (ai.py) ----------
+
+def ai_doc_file(c):
+    return FileResult(*ai.doc_file(c))
+
+
 # ---------- admin ----------
 
 def admin_building(c):
@@ -492,10 +537,10 @@ def admin_units(c):
 
 def admin_topics(c):
     if c.get("from_seed"):
-        counts = admin.upgrade_topics(c.db, c.ctx, c.building, c.get("from_seed"))
+        counts = admin.upgrade_topics(c.db, c.ctx, c.building, c.get("from_seed"), c.now)
         return {"topics": topics.all_topics(c.db, c.building), "counts": counts}
     return {"topics": admin.save_topic(c.db, c.ctx, c.building, c.get("key"), c.get("definition"),
-                                       c.get("active", True), c.get("sort", 0))}
+                                       c.get("active", True), c.get("sort", 0), c.now)}
 
 
 ROUTES = {
@@ -559,6 +604,24 @@ ROUTES = {
     ("GET", "/push/key"): get_push_key,
     ("POST", "/push/subscribe"): push_subscribe,
     ("DELETE", "/push/subscribe"): push_unsubscribe,
+    ("GET", "/ai/settings"): ai.get_settings,
+    ("POST", "/ai/settings"): ai.post_settings,
+    ("GET", "/ai/usage"): ai.get_usage,
+    ("GET", "/ai/docs"): ai.get_docs,
+    ("POST", "/ai/docs"): ai.post_docs,
+    ("GET", "/ai/doc"): ai.get_doc,
+    ("GET", "/ai/doc/file"): ai_doc_file,
+    ("POST", "/ai/doc/text"): ai.post_doc_text,
+    ("GET", "/ai/reviews"): ai.get_reviews,
+    ("POST", "/ai/reviews"): ai.post_reviews,
+    ("GET", "/ai/review"): ai.get_review,
+    ("POST", "/ai/review/check"): ai.post_review_check,
+    ("POST", "/ai/proposal/decide"): ai.post_decide,
+    ("POST", "/ai/review/apply"): ai.post_apply,
+    ("GET", "/ai/versions"): ai.get_versions,
+    ("POST", "/ai/versions/undo"): ai.post_undo,
+    ("POST", "/ai/ask"): ai.post_ask,
+    ("GET", "/ai/questions"): ai.get_questions,
 }
 
 

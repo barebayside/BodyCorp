@@ -67,6 +67,7 @@ def board(db, building, ctx, now=None, open_votes=None):
         raise forbidden("Only the committee or building manager has a board.")
     now = now or store.utc_now()
     every = {t["key"]: t for t in topics.all_topics(db, building)}
+    pinned = topics.case_lookup(db, building)
     rows = [r for r in db.find(store.CASES, {"Building_Id": int(building["id"])})
             if cases.handles(ctx, r) and r.get("Status") != "closed"]
     mine = [t for t in every.values() if t["active"] and cases.handles(ctx, {"Handler": t["handler"]})]
@@ -75,7 +76,7 @@ def board(db, building, ctx, now=None, open_votes=None):
     labels = buildings.unit_labels(db, building)
     columns = {key: [] for key in order}
     for row in rows:
-        topic = every.get(row.get("Topic_Key")) or {"label": row.get("Title"), "handler": row.get("Handler")}
+        topic = pinned(row) or {"label": row.get("Title"), "handler": row.get("Handler")}
         item = card(db, building, row, topic, labels, now, open_votes or {})
         columns.setdefault(item["stage"], []).append(item)
         if item["stage"] not in order:
@@ -152,7 +153,7 @@ def action(db, building, ctx, case_id, key, note, now=None, open_vote=None):
     now = now or store.utc_now()
     row = cases.load(db, building, ctx, case_id)
     cases._handler_only(ctx, row)
-    topic = topics.get(db, building, row.get("Topic_Key")) or {}
+    topic = topics.for_case(db, building, row) or {}
     stage = stages.current(topic, row)
     button = next((b for b in stage.get("buttons") or [] if b.get("key") == key), None)
     if not button:
@@ -221,9 +222,9 @@ def apply_deemed(db, now=None):
     now = now or store.utc_now()
     count = 0
     for building in (buildings.from_row(r) for r in db.find(store.BUILDINGS)):
-        every = {t["key"]: t for t in topics.all_topics(db, building)}
+        pinned = topics.case_lookup(db, building)
         for row in db.find(store.CASES, {"Building_Id": int(building["id"])}):
-            topic = every.get(row.get("Topic_Key"))
+            topic = pinned(row)
             due = store.parse_dt(row.get("Due_At"))
             deadline = stages.deadline_of(topic) or {}
             outcome = deadline.get("outcome")

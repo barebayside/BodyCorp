@@ -686,3 +686,118 @@ details.record > summary { display: inline-block; font-size: 15px; border-bottom
   #nav { gap: 0 16px; }
   .colours { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------- the AI helper (by-laws and rules)
+   Same park language: hairline rows, serif headings, Olive-ruled notes. No pills, no shadowed cards. */
+
+.guidance {
+  margin: 0 0 30px; padding: 2px 0 2px 16px; border-left: 2px solid var(--line-strong);
+  font: 300 italic 16px/1.45 var(--serif); color: var(--muted); max-width: 60ch;
+}
+.answer .guidance { margin: 10px 0 12px; }
+.row .due.ready { color: var(--brand); font-weight: 600; }
+.notice-plain {
+  margin: 4px 0 34px; padding: 4px 0 4px 18px; border-left: 2px solid var(--accent);
+  font-size: 17px; line-height: 1.55; color: var(--body2); max-width: 58ch;
+}
+.spend { margin: 0 0 10px; color: var(--body2); }
+.spend-big { font: 300 34px/1.1 var(--serif); color: var(--brand); margin-right: 4px; }
+
+/* The clause changes: old | new, changed words marked. */
+.clause-changes { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.cc { padding: 18px 0 20px; border-bottom: 1px solid var(--line); }
+.cc-head { margin: 0 0 10px; }
+.cc-head .label { margin-right: 8px; }
+.cc-cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 32px; }
+.cc-side { margin: 0 0 2px; font-size: 13px; color: var(--muted); }
+.cc-text { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+ins { text-decoration: none; background: var(--mint); color: var(--brand); padding: 0 1px; }
+del { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+@media (min-width: 700px) { .cc-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+/* A document's text, clause by clause. */
+.clauses { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.clauses li { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.cl-id { margin: 0 0 4px; font: 600 12px/1.4 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--accent-ink); }
+.cl-id span { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 14.5px; color: var(--body2); margin-left: 6px; }
+.cl-text { margin: 0; overflow-wrap: anywhere; }
+details.paste { margin-top: 22px; }
+.start-review .cost { font-weight: 500; color: var(--brand); }
+
+/* A quoted clause: the exact words, with document and number. */
+.quote { margin: 14px 0; padding: 2px 0 2px 18px; border-left: 2px solid var(--accent); }
+.quote p { margin: 0; font: 300 italic 18px/1.45 var(--serif); color: var(--ink); overflow-wrap: anywhere; }
+.quote .q-head {
+  margin: 0 0 4px; font: 600 11.5px/1.4 var(--sans); font-style: normal; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent-ink);
+}
+
+/* One proposal: if-missed first, clause, current -> proposed, preview, decision. */
+.prop-group + .prop-group { margin-top: 30px; }
+.prop { padding: 22px 0 24px; border-bottom: 1px solid var(--line); }
+.prop-group h3.sub + .prop { border-top: 1px solid var(--line); }
+.prop h3 { font-size: 22px; margin: 0 0 6px; }
+.prop.invalid > :not(.refused):not(.error) { opacity: .5; }
+.prop.rejected h3 { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.prop-missed { margin: 0 0 16px; padding: 12px 16px; background: var(--brand); color: var(--on-brand); }
+.prop-missed .label { color: var(--on-brand-soft); margin: 0 0 4px; }
+.prop-missed p { margin: 0; }
+.prop-missed p + p { margin-top: 8px; }
+.prop-missed p span, .cur-prop dd.long span {
+  display: block; font: 600 11px/1.4 var(--sans); letter-spacing: .12em; text-transform: uppercase;
+}
+.prop-missed p span { color: var(--on-brand-soft); }
+.pm-old { opacity: .8; }
+.pm-new { font: 400 19px/1.35 var(--serif); }
+.cur-prop dd.long p { margin: 6px 0 0; }
+.cur-prop dd.long span { color: var(--muted); margin-bottom: 2px; }
+.pv-changed { margin: 14px -10px 0; padding: 2px 10px 10px; border-left: 3px solid var(--brand); background: var(--white); }
+.pv-changed .label { display: block; margin-top: 8px; }
+.pv-changed .field label, .pv-changed .field .check { margin-top: 4px; }
+.card.spaced { margin-top: 44px; }
+.prop-status { margin: 0 0 8px; font-weight: 600; color: var(--brand); font-size: 15px; }
+.prop-why { color: var(--body2); margin: 10px 0; }
+.prop-kind { margin: 10px 0; }
+.cur-prop { margin: 12px 0; border-top: 1px solid var(--line); }
+.cur-prop > div { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.cur-prop dt { font-size: 14px; color: var(--muted); }
+.cur-prop dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.cur-prop .was { color: var(--muted); }
+.unconfirmed { margin: 12px 0; }
+.refused { margin: 12px 0; padding: 2px 0 2px 16px; border-left: 2px solid var(--ink); font-weight: 500; color: var(--ink); }
+.prop-actions { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 16px 0 0; }
+.linkbtn.quiet { color: var(--muted); }
+.prop-form { margin-top: 14px; padding: 16px 18px 18px; background: var(--mint); }
+.prop-form label:first-child { margin-top: 0; }
+.prop-form .actions { margin: 16px 0 0; }
+.preview-box { margin: 14px 0 0; }
+.pv-toggle { display: flex; gap: 22px; margin: 12px 0 8px; }
+.pv-toggle .linkbtn { color: var(--muted); border-bottom-color: transparent; }
+.pv-toggle .linkbtn.on { color: var(--brand); border-bottom-color: currentColor; font-weight: 600; }
+.form-preview { padding: 6px 18px 18px; background: var(--stone); }
+.form-preview input, .form-preview select, .form-preview textarea { background: var(--white); }
+.pv-stage { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
+.pv-email { margin: 10px 0 0; padding: 2px 0 2px 16px; border-left: 2px solid var(--line-strong); }
+.pv-email p { margin: 4px 0; overflow-wrap: anywhere; }
+.apply-box { padding-top: 6px; }
+body.wide .prop, body.wide .apply-box, body.wide .prop-group h3.sub { max-width: 860px; }
+.apply-line { font: 300 22px/1.35 var(--serif); color: var(--brand); max-width: 46ch; margin: 0 0 16px; }
+.since { margin: 18px 0; }
+.since .label { margin-bottom: 6px; }
+.waiting p { color: var(--body2); }
+
+/* Request type history. */
+.versions { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+.ver { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.ver-head { margin: 0 0 2px; }
+.ver.withdrawn .ver-head { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.ver .btn { margin-top: 10px; }
+
+/* Ask about your by-laws. */
+.ask-box .btn { margin-top: 16px; }
+.ask-box .small { margin: 6px 0 0; }
+.answer { padding: 22px 0; border-bottom: 1px solid var(--line); }
+.answer:first-of-type { border-top: 1px solid var(--line); }
+.a-q { margin: 0 0 2px; font: 400 21px/1.35 var(--serif); color: var(--brand); overflow-wrap: anywhere; }
+.a-text { margin: 8px 0 12px; overflow-wrap: anywhere; }
+.unconfirmed-banner { margin: 12px 0; padding: 10px 14px; background: var(--stone); border-left: 3px solid var(--ink); }

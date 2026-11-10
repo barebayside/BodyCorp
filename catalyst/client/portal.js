@@ -369,6 +369,7 @@ function drawChrome() {
   if (approvedUnits().length || isStaff()) items.push(["#/home", "Home"]);
   if (c.handle) items.push(["#/board", "Board"]);
   if (c.committee) items.push(["#/votes", "Votes"], ["#/meetings", "Meetings"], ["#/tasks", "Tasks"]);
+  if (c.aiSee) items.push(["#/ai", "By-laws"]);
   if (c.approve) items.push(["#/approvals", "Approvals"], ["#/members", "Members"]);
   if (c.handle) items.push(["#/notices", "Notices"], ["#/docs", "Documents"]);
   if (c.admin) items.push(["#/settings", "Settings"]);
@@ -385,6 +386,8 @@ function markNav() {
   if (h.startsWith("#/vote/")) h = "#/votes";
   if (h.startsWith("#/meeting/") || h.startsWith("#/minutes/")) h = "#/meetings";
   if (h.startsWith("#/new") || h.startsWith("#/request/")) h = "#/home";
+  if (h.startsWith("#/ai/") || h === "#/ask") h = "#/ai";
+  if (h === "#/settings/ai") h = "#/settings";
   $$("#nav a").forEach((a) => {
     const on = h === a.dataset.nav || h.startsWith(a.dataset.nav + "/");
     a.classList.toggle("on", on);
@@ -426,8 +429,11 @@ async function loadMe() {
     can: {
       submit: !!can.submit, handle: !!can.handle || admin, approve: !!can.approve || admin,
       admin, owner: !!can.owner, committee: !!(r.committee && r.committee.committee) || admin,
+      // The AI helper: shown only once it is switched on for the building (Settings → AI).
+      aiSee: !!(r.ai && r.ai.enabled && r.ai.see), aiAdmin: !!(r.ai && r.ai.admin),
     },
     committee: r.committee || {},
+    ai: r.ai || {},
   };
   drawChrome();
 }
@@ -487,6 +493,14 @@ const ROUTES = [
   { re: /^#\/notices$/, view: viewNotices, need: "handle" },
   { re: /^#\/docs$/, view: viewDocs, need: "handle" },
   { re: /^#\/settings$/, view: viewSettings, need: "admin" },
+  { re: /^#\/settings\/ai$/, view: viewAiSettings, need: "aiAdmin" },
+  { re: /^#\/ai$/, view: viewAi, need: "aiSee" },
+  { re: /^#\/ask$/, view: viewAsk, need: "aiSee" },
+  { re: /^#\/ai\/upload$/, view: viewAiUpload, need: "aiSee" },
+  { re: /^#\/ai\/compare$/, view: viewAiCompare, need: "aiSee" },
+  { re: /^#\/ai\/doc\/(.+)$/, view: viewAiDoc, need: "aiSee" },
+  { re: /^#\/ai\/review\/(.+)$/, view: viewAiReview, need: "aiSee", wide: true },
+  { re: /^#\/ai\/history(?:\/(.+))?$/, view: viewAiHistory, need: "aiSee" },
 ];
 
 let seq = 0;   // each route() call gets a number; a slower, older one stops drawing
@@ -1394,7 +1408,7 @@ async function viewBoard(t) {
   const total = columns.reduce((n, col) => n + col.cards.length, 0);
   draw(`${takeFlash()}<div class="page-head">
       <h1>Board</h1>
-      <p class="link-row small"><a href="#/inbox">List view</a>${state.me.can.committee ? '<a href="#/committee">Who does what</a>' : ""}${r.closed ? `<a href="#/inbox/closed">Closed (${esc(r.closed)})</a>` : ""}</p>
+      <p class="link-row small"><a href="#/inbox">List view</a>${state.me.can.committee ? '<a href="#/committee">Who does what</a>' : ""}${state.me.can.aiSee ? '<a href="#/ask">Ask about your by-laws</a>' : ""}${r.closed ? `<a href="#/inbox/closed">Closed (${esc(r.closed)})</a>` : ""}</p>
     </div>
     ${moduleNoteHtml(r.module_note)}
     <p class="lead board-lead">${total ? `${total} open ${total === 1 ? "request" : "requests"}, by step. Red: 3 days or less before the deadline.` : "Nothing open. All clear."}</p>
@@ -2313,7 +2327,10 @@ async function viewSettings(t) {
       <textarea id="paste" rows="6" placeholder="101,1&#10;102,2" spellcheck="false"></textarea>
       <p class="error" role="alert"></p>
       <button class="btn block" type="submit">Add units</button>
-    </form>`);
+    </form>
+    ${state.me.can.aiAdmin ? `<section class="card"><h2>AI helper</h2>
+      <p class="muted">Reads the CMS and by-laws, proposes changes to the request types and answers the committee's questions. ${state.me.ai.enabled ? "On for this building." : "Off for this building."}</p>
+      <p class="link-row"><a href="#/settings/ai">AI settings</a></p></section>` : ""}`);
   const f = $("#f");
   f.addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -2349,6 +2366,560 @@ async function viewSettings(t) {
     busy($("button", u), err, async () => {
       await api("/admin/units", { body: { b: state.b, units } });
       state.flash = `Sent ${units.length} units. Any new ones are added.`;
+      route();
+    });
+  });
+}
+
+// ------------------------------------------------------------------ the AI helper (by-laws and rules)
+// The AI proposes; a person decides. Every screen says "Guidance, not legal advice". Nothing here changes a
+// request type until a person approves each proposal and presses Apply. AI is off per building until an admin
+// switches it on (Settings → AI); the server answers 403 for every AI route while it's off.
+
+const AI_GUIDANCE = "Guidance, not legal advice. Check anything important with your body corporate lawyer.";
+const DOC_STATUS = {
+  uploaded: "Uploaded", transcribing: "Being read by the AI", text_ready: "Text ready", in_force: "In force",
+  superseded: "Replaced", withdrawn: "Withdrawn",
+};
+const DOC_LABEL = { cms: "CMS", bylaws: "By-laws", cms_bylaws: "CMS and by-laws" };
+const CHANGE_WORDS = { changed: "Changed", added: "New", removed: "Removed", moved: "Renumbered" };
+const PROP_STATUS = { proposed: "", invalid: "Refused by the checker", approved: "Approved", edited: "Approved with edits", rejected: "Rejected", applied: "Applied", undone: "Undone" };
+const CITE_DOC = { old: "Old document", new: "New document", law: "The law file", bylaws: "By-laws", cms: "CMS" };
+const money = (v) => "A$" + (Number(v) || 0).toFixed(2);
+
+function aiBack() { return '<a class="back" href="#/ai">← By-laws and rules</a>'; }
+
+function guidanceHtml() { return `<p class="guidance">${esc(AI_GUIDANCE)}</p>`; }
+
+// The new text with the changed words marked against the old (word-level, small texts only).
+function wordDiff(oldText, newText) {
+  const a = String(oldText || "").split(/(\s+)/);
+  const b = String(newText || "").split(/(\s+)/);
+  if (!oldText || !newText || a.length * b.length > 250000) return { old: esc(oldText), new: esc(newText) };
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
+  for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  let i = 0, j = 0, outOld = "", outNew = "";
+  while (i < m && j < n) {
+    if (a[i] === b[j]) { outOld += esc(a[i]); outNew += esc(b[j]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { outOld += /\S/.test(a[i]) ? `<del>${esc(a[i])}</del>` : esc(a[i]); i++; }
+    else { outNew += /\S/.test(b[j]) ? `<ins>${esc(b[j])}</ins>` : esc(b[j]); j++; }
+  }
+  for (; i < m; i++) outOld += /\S/.test(a[i]) ? `<del>${esc(a[i])}</del>` : esc(a[i]);
+  for (; j < n; j++) outNew += /\S/.test(b[j]) ? `<ins>${esc(b[j])}</ins>` : esc(b[j]);
+  return { old: outOld, new: outNew };
+}
+
+function clauseChangesHtml(changes) {
+  if (!changes.length) return '<p class="muted">No clause changed.</p>';
+  return `<ol class="clause-changes">${changes.map((c) => {
+    const d = wordDiff(c.old, c.new);
+    const was = c.change === "moved" && c.old_clause ? ` (was ${esc(c.old_clause)})` : "";
+    return `<li class="cc">
+      <p class="cc-head"><span class="label">${esc(CHANGE_WORDS[c.change] || c.change)}</span> <b>Clause ${esc(c.clause)}</b>${was}</p>
+      <div class="cc-cols">
+        <div><p class="cc-side">Old</p><p class="cc-text">${c.old ? d.old : '<span class="muted">(not there)</span>'}</p></div>
+        <div><p class="cc-side">New</p><p class="cc-text">${c.new ? d.new : '<span class="muted">(removed)</span>'}</p></div>
+      </div>
+    </li>`;
+  }).join("")}</ol>`;
+}
+
+function budgetLine(b) {
+  if (!b) return "";
+  return `This month: ${money(b.spent_aud)} of ${money(b.cap_aud)} used.`;
+}
+
+// ---- the hub
+
+async function viewAi(t) {
+  drawLoading();
+  const [d, r] = await Promise.all([api(withB("/ai/docs")), api(withB("/ai/reviews"))]);
+  if (t !== seq) return;
+  const docs = d.docs || [];
+  const reviews = r.reviews || [];
+  const me = state.me;
+  draw(`${takeFlash()}<div class="page-head">
+      <h1>By-laws and rules</h1>
+      <p class="link-row small"><a href="#/ask">Ask about your by-laws</a><a href="#/ai/history">Request type history</a>${me.can.aiAdmin ? '<a href="#/settings/ai">AI settings</a>' : ""}</p>
+    </div>
+    <p class="lead">When the CMS or by-laws change, the AI compares the two versions clause by clause and proposes changes to the request types. A person checks and approves every one.</p>
+    ${guidanceHtml()}
+    <section class="card"><h2>Reviews</h2>
+      ${reviews.length ? `<div class="rows">${reviews.map((v) => `<a class="row" href="#/ai/review/${enc(v.id)}">
+        <span class="ref">${esc(fmtDate(v.started))}</span>
+        <span class="due${v.status === "ready" ? " ready" : ""}">${esc(v.status_label)}</span>
+        <span class="title">${esc(v.old_title)} → ${esc(v.new_title)}</span>
+        <span class="status">${esc(v.change_count)} clause${v.change_count === 1 ? "" : "s"} changed${v.cost_aud ? " · cost " + esc(money(v.cost_aud)) : ""}</span>
+      </a>`).join("")}</div>` : '<p class="muted">No reviews yet. Upload the new version, then compare it with the current one.</p>'}
+      ${d.can_manage && docs.length > 1 ? '<p class="link-row"><a href="#/ai/compare">Compare two versions</a></p>' : ""}
+    </section>
+    <section class="card"><h2>Building documents</h2>
+      ${docs.length ? `<div class="rows">${docs.map((x) => `<a class="row" href="#/ai/doc/${enc(x.id)}">
+        <span class="ref">${esc(x.kind_label)}${x.version_label ? " · " + esc(x.version_label) : ""}</span>
+        <span class="due${x.needs_check ? " late" : ""}">${x.needs_check ? "Text to check" : esc(DOC_STATUS[x.status] || x.status)}</span>
+        <span class="title">${esc(x.title)}</span>
+        <span class="status">${x.registered_text ? "Registered " + esc(x.registered_text) : "Registration date not entered"}${x.clause_count ? " · " + esc(x.clause_count) + " clauses" : ""}</span>
+      </a>`).join("")}</div>` : '<p class="muted">Nothing uploaded yet.</p>'}
+      ${d.can_manage ? '<p class="link-row"><a href="#/ai/upload">Upload a new version</a></p>' : ""}
+    </section>`);
+}
+
+// ---- upload
+
+async function viewAiUpload(t) {
+  draw(`${aiBack()}<h1>Upload a new version</h1>
+    <p class="lead">The CMS or by-laws as registered with Titles Queensland, as a PDF (5 MB at most).</p>
+    <form id="up" class="card" novalidate>
+      <label for="up-kind">Which document?</label>
+      <select id="up-kind"><option value="bylaws">By-laws</option><option value="cms">CMS</option><option value="cms_bylaws">One PDF with both</option></select>
+      <label for="up-title">Title</label>
+      <input id="up-title" maxlength="255" placeholder="By-laws, 3rd edition">
+      <label for="up-label">Version name <span class="opt">(optional)</span></label>
+      <input id="up-label" maxlength="100" placeholder="CMS 3rd edition">
+      <div class="two-fields">
+        <div><label for="up-date">Registration date <span class="opt">(needed before changes apply)</span></label><input id="up-date" type="date"></div>
+        <div><label for="up-dealing">Dealing number <span class="opt">(optional)</span></label><input id="up-dealing" maxlength="100"></div>
+      </div>
+      <label for="up-file">PDF</label>
+      <input id="up-file" type="file" accept="application/pdf">
+      <p class="small muted">A PDF with its own text is read here, free. A scanned PDF is read by the AI (a few dollars at most), and a person must check its text against the PDF before it's used.</p>
+      <p class="error" role="alert"></p>
+      <button class="btn block" type="submit">Upload</button>
+    </form>`);
+  const f = $("#up");
+  f.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const err = $(".error", f);
+    const title = $("#up-title").value.trim();
+    const file = $("#up-file").files[0];
+    if (!title) { err.textContent = "Give it a title."; return; }
+    if (!file) { err.textContent = "Pick the PDF."; return; }
+    if (!/pdf$/i.test(file.type || file.name)) { err.textContent = "It must be a PDF."; return; }
+    busy($('button[type="submit"]', f), err, async () => {
+      const data = await readBase64(file);
+      const r = await api("/ai/docs", {
+        body: {
+          b: state.b, kind: $("#up-kind").value, title, version_label: $("#up-label").value.trim(),
+          registered_on: $("#up-date").value, dealing_no: $("#up-dealing").value.trim(), file: { name: file.name, data },
+        },
+      });
+      state.flash = r.warning || "Uploaded. Check a few clauses against the PDF.";
+      go("#/ai/doc/" + enc(r.doc.id));
+    });
+  });
+}
+
+// ---- one document: its text, clause by clause
+
+async function viewAiDoc(t, rawId) {
+  const id = decodeURIComponent(rawId);
+  drawLoading();
+  const r = await api(withB("/ai/doc", { id }));
+  if (t !== seq) return;
+  const d = r.doc;
+  const clauses = r.clauses || [];
+  const manage = r.can_manage;
+  draw(`${takeFlash()}${aiBack()}
+    <h1>${esc(d.title)}</h1>
+    <dl class="facts">
+      <div><dt>Document</dt><dd>${esc(d.kind_label)}${d.version_label ? " · " + esc(d.version_label) : ""}</dd></div>
+      <div><dt>Registered</dt><dd>${d.registered_text ? esc(d.registered_text) : "Not entered yet"}${d.dealing_no ? " · dealing " + esc(d.dealing_no) : ""}</dd></div>
+      <div><dt>Status</dt><dd>${esc(DOC_STATUS[d.status] || d.status)}</dd></div>
+      <div><dt>Text</dt><dd>${d.text_source === "pdf_text" ? "Read from the PDF" : d.text_source === "ai_transcribed" ? "Read by the AI from a scan" : d.text_source === "pasted" ? "Pasted by a person" : "None yet"}${d.text_checked ? " · checked" : ""}</dd></div>
+    </dl>
+    ${d.error ? `<p class="draft">${esc(d.error)}</p>` : ""}
+    ${d.text_source === "ai_transcribed" && !d.text_checked ? '<p class="draft">Read by AI from a scan: compare it with the PDF before it is used.</p>' : ""}
+    <p class="link-row"><button type="button" class="linkbtn" id="pdf">Open the PDF</button></p>
+    <p class="error" id="pdf-error"></p>
+    ${manage && d.needs_check ? `<form id="chk" class="sub-form" novalidate>
+      <label class="check"><input type="checkbox" id="chk-box"><span>I've compared this text with the PDF and it's right</span></label>
+      <p class="error" role="alert"></p>
+      <button class="btn secondary plain" type="submit">Save: text checked</button>
+    </form>` : ""}
+    ${manage && !d.registered_on ? `<form id="reg" class="inline-form" novalidate>
+      <label for="reg-date" class="sr-only">Registration date</label><input id="reg-date" type="date">
+      <button class="btn secondary plain" type="submit">Save the registration date</button>
+      <p class="error" role="alert"></p>
+    </form>` : ""}
+    <section class="card spaced"><h2>Clauses</h2>
+      ${clauses.length ? `<ol class="clauses">${clauses.map((c) => `<li><p class="cl-id">${esc(c.id === "preamble" ? "Before clause 1" : c.id)}</p><p class="cl-text">${lines(c.text)}</p></li>`).join("")}</ol>` : `<p class="muted">${d.status === "transcribing" ? "The AI is reading the scan. Usually under an hour." : "No text yet."}</p>`}
+      ${manage ? `<details class="paste"><summary>Paste the text instead</summary>
+        <form id="paste" novalidate>
+          <label for="paste-text">The whole document's text. Each clause on its own line, starting with its number.</label>
+          <textarea id="paste-text" rows="10" spellcheck="false"></textarea>
+          <p class="error" role="alert"></p>
+          <button class="btn secondary plain" type="submit">Replace the text</button>
+        </form></details>` : ""}
+    </section>`);
+  $("#pdf").addEventListener("click", (ev) => busy(ev.currentTarget, $("#pdf-error"), async () => {
+    saveBlob(await fetchBlob(withB("/ai/doc/file", { id })), d.title + ".pdf");
+  }));
+  const chk = $("#chk");
+  if (chk) chk.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!$("#chk-box").checked) { $(".error", chk).textContent = "Tick the box once you've compared it."; return; }
+    busy($("button", chk), $(".error", chk), async () => {
+      await api("/ai/doc/text", { body: { b: state.b, id, checked: true } });
+      state.flash = "Marked as checked. It can be used now.";
+      route();
+    });
+  });
+  const reg = $("#reg");
+  if (reg) reg.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    if (!$("#reg-date").value) { $(".error", reg).textContent = "Pick the date."; return; }
+    busy($("button", reg), $(".error", reg), async () => {
+      await api("/ai/doc/text", { body: { b: state.b, id, registered_on: $("#reg-date").value } });
+      state.flash = "Registration date saved.";
+      route();
+    });
+  });
+  const paste = $("#paste");
+  if (paste) paste.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const text = $("#paste-text").value.trim();
+    if (!text) { $(".error", paste).textContent = "Paste the text first."; return; }
+    busy($("button", paste), $(".error", paste), async () => {
+      await api("/ai/doc/text", { body: { b: state.b, id, text } });
+      state.flash = "Text replaced. Check it against the PDF, then tick \"text checked\".";
+      route();
+    });
+  });
+}
+
+// ---- compare two versions
+
+async function viewAiCompare(t) {
+  drawLoading();
+  const r = await api(withB("/ai/docs"));
+  if (t !== seq) return;
+  const docs = (r.docs || []).filter((x) => x.clause_count);
+  const current = docs.find((x) => x.status === "in_force") || docs[1] || docs[0] || {};
+  const newest = docs[0] || {};
+  const opts = (sel) => docs.map((x) => `<option value="${esc(x.id)}"${x.id === sel ? " selected" : ""}>${esc(x.title)}${x.version_label ? " · " + esc(x.version_label) : ""}${x.usable ? "" : " (text not checked)"}</option>`).join("");
+  draw(`${aiBack()}<h1>Compare two versions</h1>
+    <p class="lead">The clause changes are worked out here, free. The AI is only asked when you press Start.</p>
+    <form id="cmp" class="card" novalidate>
+      <div class="two-fields">
+        <div><label for="cmp-old">Current version</label><select id="cmp-old">${opts(current.id)}</select></div>
+        <div><label for="cmp-new">New version</label><select id="cmp-new">${opts(newest.id)}</select></div>
+      </div>
+      <p class="error" role="alert"></p>
+      <button class="btn secondary plain" type="submit">Show the changes</button>
+    </form>
+    <div id="cmp-out"></div>`);
+  const f = $("#cmp");
+  f.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const body = { b: state.b, old_doc_id: $("#cmp-old").value, new_doc_id: $("#cmp-new").value };
+    busy($("button", f), $(".error", f), async () => {
+      const res = await api("/ai/reviews", { body });
+      const ch = res.changes || [];
+      $("#cmp-out").innerHTML = `<section class="card"><h2>${esc(ch.length)} clause${ch.length === 1 ? "" : "s"} changed</h2>
+        ${clauseChangesHtml(ch)}</section>
+        ${ch.length ? `<section class="card start-review">
+          <h2>Ask the AI to propose changes</h2>
+          <p>It reads both versions and the request types, then proposes changes, each tied to its clause. About an hour; we'll email the approver.</p>
+          <p class="cost">At most ${esc(money(res.estimate_aud))}, usually much less. ${esc(budgetLine(res.budget))}</p>
+          ${res.fits ? '<p class="error" id="start-error" role="alert"></p><button class="btn" type="button" id="start">Start</button>'
+            : `<p class="draft">This month's AI budget doesn't have room for it. An admin can raise the limit in Settings → AI.</p>`}
+        </section>` : ""}`;
+      const start = $("#start");
+      if (start) start.addEventListener("click", () => busy(start, $("#start-error"), async () => {
+        const go2 = await api("/ai/reviews", { body: { ...body, confirm: true } });
+        state.flash = "Comparing — usually under an hour. We'll email you.";
+        go("#/ai/review/" + enc(go2.review.id));
+      }));
+    });
+  });
+}
+
+// ---- the review: proposals to tick, edit or reject
+
+function citationsHtml(cites) {
+  return (cites || []).map((c) => `<blockquote class="quote"><p class="q-head">${esc(CITE_DOC[c.doc] || c.doc)} · clause ${esc(c.clause)}</p><p>“${esc(c.quote)}”</p></blockquote>`).join("");
+}
+
+function formPreviewHtml(fields, which, other) {
+  if (!fields) return '<p class="muted small">No form.</p>';
+  const was = {};
+  (other || []).forEach((f) => { was[f.key] = JSON.stringify(f); });
+  return `<div class="form-preview" aria-label="${esc(which)}" inert>${fields.map((f, i) => {
+    const html = fieldHtml(f, "pv_" + which + "_" + i);
+    const changed = which === "after" && other && was[f.key] !== JSON.stringify(f);
+    return changed ? `<div class="pv-changed"><span class="label">${was[f.key] ? "Changed" : "New"}</span>${html}</div>` : html;
+  }).join("")}</div>`;
+}
+
+function proposalHtml(p, canDecide) {
+  const decided = PROP_STATUS[p.status];
+  const showActions = canDecide && !p.invalid && ["proposed", "approved", "edited", "rejected"].includes(p.status);
+  const formChanged = JSON.stringify(p.before_form) !== JSON.stringify(p.after_form);
+  return `<article class="prop${p.invalid ? " invalid" : ""}${p.status === "rejected" ? " rejected" : ""}" id="prop-${esc(p.id)}">
+    ${p.if_missed ? `<div class="prop-missed"><p class="label">If nobody decides in time</p>
+      ${p.if_missed.before ? `<p class="pm-old"><span>Now</span>${esc(p.if_missed.before)}</p>` : ""}<p class="pm-new"><span>Proposed</span>${esc(p.if_missed.after)}</p></div>` : ""}
+    <h3>${esc(p.title)}</h3>
+    ${decided ? `<p class="prop-status">${esc(decided)}${p.decided_by ? " by " + esc(p.decided_by) : ""}${p.note ? ": " + esc(p.note) : ""}</p>` : ""}
+    ${citationsHtml(p.citations)}
+    ${p.why ? `<p class="prop-why">${esc(p.why)}</p>` : ""}
+    ${p.kind === "edit_topic" && p.changes.length ? `<dl class="cur-prop">${p.changes.map((c) => `<div>
+        <dt>${esc(c.where)}</dt>${c.old.length + c.new.length > 60
+          ? `<dd class="long"><p><span>Now</span>${lines(c.old)}</p><p><span>Proposed</span><b>${lines(c.new)}</b></p></dd>`
+          : `<dd><span class="was">${esc(c.old)}</span> <span aria-hidden="true">→</span><span class="sr-only">becomes</span> <b>${esc(c.new)}</b></dd>`}</div>`).join("")}</dl>` : ""}
+    ${p.kind === "new_topic" ? `<p class="prop-kind">A new request type: <b>${esc(p.topic_label)}</b>. It starts as Draft.</p>` : ""}
+    ${p.kind === "retire_topic" ? `<p class="prop-kind">Stop offering <b>${esc(p.topic_label)}</b>. Open requests carry on.</p>` : ""}
+    ${p.kind === "flag" ? '<p class="prop-kind">A question for a person to check. It changes nothing.</p>' : ""}
+    ${p.unconfirmed ? `<p class="draft unconfirmed">UNCONFIRMED: ${esc(p.unconfirmed_reason)}</p>` : ""}
+    ${p.invalid ? `<p class="refused">Refused by the checker: ${esc((p.problems || []).join(" "))}</p>` : ""}
+    ${(formChanged && p.after_form) || (p.previews || []).length ? `<details class="preview-box"><summary>Preview</summary>
+      ${formChanged && p.after_form ? `<div class="pv-toggle" role="group" aria-label="Before or after">
+          ${p.before_form ? '<button type="button" class="linkbtn" data-pv="before">Before</button>' : ""}<button type="button" class="linkbtn on" data-pv="after">After</button></div>
+        <div class="pv" data-pv-show="after">${formPreviewHtml(p.after_form, "after", p.before_form)}</div>
+        ${p.before_form ? `<div class="pv" data-pv-show="before" hidden>${formPreviewHtml(p.before_form, "before")}</div>` : ""}` : ""}
+      ${(p.previews || []).map((s) => `<div class="pv-stage"><p class="label">Step: ${esc(s.stage)}</p>
+        ${s.instructions ? `<p>${esc(s.instructions)}</p>` : ""}
+        ${s.emails.map((e) => `<div class="pv-email"><p class="small muted">${esc(e.button)} emails ${esc(TO_WHO[e.to] || e.to)}</p><p><b>${esc(e.subject)}</b></p><p>${lines(e.body)}</p></div>`).join("")}</div>`).join("")}
+    </details>` : ""}
+    ${showActions ? `<div class="prop-actions">
+      ${p.status !== "approved" && p.status !== "edited" ? `<button type="button" class="linkbtn" data-do="approve">${p.kind === "flag" ? "Mark as checked" : "Approve"}</button>` : ""}
+      ${p.kind === "edit_topic" || p.kind === "new_topic" ? '<button type="button" class="linkbtn" data-do="edit">Edit</button>' : ""}
+      ${p.status !== "rejected" ? '<button type="button" class="linkbtn quiet" data-do="reject">Reject</button>' : ""}
+    </div>
+    <form class="prop-form" data-form="reject" hidden novalidate>
+      <label for="rj-${esc(p.id)}">Why is it rejected?</label><input id="rj-${esc(p.id)}" maxlength="255">
+      <div class="actions"><button class="btn secondary plain" type="submit">Reject it</button><button type="button" class="linkbtn" data-cancel>Cancel</button></div>
+    </form>
+    <form class="prop-form" data-form="edit" hidden novalidate>
+      ${p.kind === "edit_topic" ? p.raw_changes.map((c, i) => `<label for="ed-${esc(p.id)}-${i}">${esc((p.changes[i] || {}).where || c.path)}</label>${typeof c.value === "boolean"
+        ? `<select id="ed-${esc(p.id)}-${i}" data-i="${i}" data-kind="bool"><option value="true"${c.value ? " selected" : ""}>Yes</option><option value="false"${c.value ? "" : " selected"}>No</option></select>`
+        : typeof c.value === "number" ? `<input id="ed-${esc(p.id)}-${i}" data-i="${i}" data-kind="num" type="number" value="${esc(c.value)}">`
+        : typeof c.value === "string" ? `<textarea id="ed-${esc(p.id)}-${i}" data-i="${i}" data-kind="text" rows="${c.value.length > 80 ? 4 : 2}">${esc(c.value)}</textarea>`
+        : `<textarea id="ed-${esc(p.id)}-${i}" data-i="${i}" data-kind="json" rows="5" spellcheck="false">${esc(JSON.stringify(c.value, null, 1))}</textarea>`}`).join("")
+        : `<label for="ed-${esc(p.id)}-new">The new request type's settings</label><textarea id="ed-${esc(p.id)}-new" data-kind="after" rows="10" spellcheck="false">${esc(JSON.stringify(p.after, null, 1))}</textarea>`}
+      <label for="en-${esc(p.id)}">What you changed, and why <span class="opt">(optional)</span></label><input id="en-${esc(p.id)}" data-note maxlength="255">
+      <p class="small muted">Your edit is checked the same way as the AI's.</p>
+      <div class="actions"><button class="btn secondary plain" type="submit">Save the edit</button><button type="button" class="linkbtn" data-cancel>Cancel</button></div>
+    </form>` : ""}
+    <p class="error" role="alert"></p>
+  </article>`;
+}
+
+async function viewAiReview(t, rawId) {
+  const id = decodeURIComponent(rawId);
+  drawLoading();
+  const r = await api(withB("/ai/review", { id }));
+  if (t !== seq) return;
+  const v = r.review;
+  const props = r.proposals || [];
+  const groups = [];
+  props.forEach((p) => {
+    let g = groups.find((x) => x.key === p.topic_key);
+    if (!g) { g = { key: p.topic_key, label: p.topic_label, items: [] }; groups.push(g); }
+    g.items.push(p);
+  });
+  const running = v.status === "mapping" || v.status === "proposing";
+  const changes = r.changes || [];
+  const voteMode = r.approver === "committee_vote";
+  draw(`${takeFlash()}${aiBack()}
+    <h1>${esc(v.old_title)} → ${esc(v.new_title)}</h1>
+    <p class="meta-line">${esc(v.status_label)} · started ${esc(fmtDate(v.started))}${v.started_by ? " by " + esc(v.started_by) : ""}${v.cost_aud ? " · cost " + esc(money(v.cost_aud)) : ""}</p>
+    ${guidanceHtml()}
+    ${v.error ? `<p class="draft">${esc(v.error)}</p>` : ""}
+    ${running ? `<section class="card waiting"><h2>Comparing</h2><p>Usually under an hour. We'll email ${esc(r.approver_label.toLowerCase())}.</p>
+      <p class="error" id="chk-error"></p><button type="button" class="linkbtn" id="check-now">Check now</button></section>` : ""}
+    ${r.vote ? `<section class="card"><h2>Committee vote</h2><p>The committee is voting on these changes outside a meeting. They apply only if it passes.</p><p class="link-row"><a href="#/vote/${enc(r.vote.id)}">Open the vote</a></p></section>` : ""}
+    <section class="card"><h2>What changed</h2>
+      ${changes.length > 6 ? `<details><summary>${esc(changes.length)} clauses changed: show them</summary>${clauseChangesHtml(changes)}</details>` : clauseChangesHtml(changes)}
+    </section>
+    ${groups.length ? `<section class="card"><h2>Proposals</h2>
+      ${!r.can_decide && v.status === "ready" ? `<p class="small muted">Approved by: ${esc(r.approver_label)}.</p>` : ""}
+      ${groups.map((g) => `<div class="prop-group"><h3 class="sub">${esc(g.label)}</h3>${g.items.map((p) => proposalHtml(p, r.can_decide)).join("")}</div>`).join("")}
+    </section>` : v.status === "ready" || v.status === "applied" ? '<section class="card"><h2>Proposals</h2><p class="muted">No changes proposed.</p></section>' : ""}
+    ${v.status === "ready" && props.length ? `<section class="card apply-box">
+      ${r.approved_count ? `<p class="apply-line">Apply ${esc(r.approved_count)} approved change${r.approved_count === 1 ? "" : "s"}${r.registered_text ? ` — in force from ${esc(r.registered_text)} (registration date)` : ""}. ${esc(r.open_cases_pinned)} open request${r.open_cases_pinned === 1 ? " keeps its" : "s keep their"} current rules.</p>`
+        : '<p class="apply-line muted">Approve at least one proposal to apply it.</p>'}
+      ${!r.registered_on ? `<p class="draft">Enter the new document's registration date first: <a href="#/ai/doc/${enc(v.new_doc_id)}">open it</a>.</p>` : ""}
+      ${(r.lodged_since_registration || []).length ? `<div class="since"><p class="label">Lodged since the registration date — check these by hand</p><div class="mini-rows">${r.lodged_since_registration.map((c) => `<a class="mini-row" href="#/case/${enc(c.id)}"><span class="grow"><b>${esc(c.ref)}</b> ${esc(c.title)}</span></a>`).join("")}</div></div>` : ""}
+      ${r.can_apply ? `<p class="error" id="apply-error" role="alert"></p><button class="btn" type="button" id="apply">${voteMode ? "Send to a committee vote" : "Apply"}</button>` : ""}
+    </section>` : ""}
+    ${v.status === "applied" ? `<p class="okmsg">Applied${v.applied_at ? " " + esc(fmtDate(v.applied_at)) : ""}. See <a href="#/ai/history">request type history</a> to undo.</p>` : ""}`);
+
+  const check = $("#check-now");
+  if (check) check.addEventListener("click", () => busy(check, $("#chk-error"), async () => {
+    const res = await api("/ai/review/check", { body: { b: state.b, id } });
+    if (res.review.status !== v.status) route(); else $("#chk-error").textContent = "Not finished yet.";
+  }));
+  $$(".preview-box").forEach((box) => {
+    $$("[data-pv]", box).forEach((btn) => btn.addEventListener("click", () => {
+      $$("[data-pv]", box).forEach((b2) => b2.classList.toggle("on", b2 === btn));
+      $$("[data-pv-show]", box).forEach((p) => { p.hidden = p.dataset.pvShow !== btn.dataset.pv; });
+    }));
+  });
+  props.forEach((p) => {
+    const card = $("#prop-" + p.id);
+    if (!card) return;
+    const err = card.querySelector(":scope > .error");
+    const decide = (body, btn) => busy(btn, err, async () => {
+      await api("/ai/proposal/decide", { body: { b: state.b, id: p.id, ...body } });
+      state.flash = "Saved.";
+      route();
+    });
+    $$("[data-do]", card).forEach((btn) => btn.addEventListener("click", () => {
+      if (btn.dataset.do === "approve") { decide({ decision: "approve" }, btn); return; }
+      $$(".prop-form", card).forEach((f) => { f.hidden = f.dataset.form !== btn.dataset.do; });
+      const first = $(`[data-form="${btn.dataset.do}"] input, [data-form="${btn.dataset.do}"] textarea, [data-form="${btn.dataset.do}"] select`, card);
+      if (first) first.focus();
+    }));
+    $$("[data-cancel]", card).forEach((btn) => btn.addEventListener("click", () => { $$(".prop-form", card).forEach((f) => { f.hidden = true; }); }));
+    const rj = $('[data-form="reject"]', card);
+    if (rj) rj.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const note = $("input", rj).value.trim();
+      if (!note) { err.textContent = "Say briefly why."; return; }
+      decide({ decision: "reject", note }, $("button", rj));
+    });
+    const ed = $('[data-form="edit"]', card);
+    if (ed) ed.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      err.textContent = "";
+      let edited;
+      try {
+        if (p.kind === "new_topic") edited = { after: JSON.parse($('[data-kind="after"]', ed).value) };
+        else {
+          edited = { changes: p.raw_changes.map((c, i) => {
+            const el = $(`[data-i="${i}"]`, ed);
+            const kind = el.dataset.kind;
+            const value = kind === "bool" ? el.value === "true" : kind === "num" ? Number(el.value) : kind === "json" ? JSON.parse(el.value) : el.value;
+            return { ...c, value };
+          }) };
+        }
+      } catch (e2) { err.textContent = "That isn't in the right shape. Check the brackets and quotes."; return; }
+      decide({ decision: "edit", edited, note: $("[data-note]", ed).value.trim() }, $('button[type="submit"]', ed));
+    });
+  });
+  const apply = $("#apply");
+  if (apply) apply.addEventListener("click", () => busy(apply, $("#apply-error"), async () => {
+    const res = await api("/ai/review/apply", { body: { b: state.b, id } });
+    state.flash = res.voting ? "Sent to the committee as a vote outside a meeting. The changes apply only if it passes."
+      : `Applied. ${res.effective_text ? "In force from " + res.effective_text + "." : ""} Open requests keep their current rules.`;
+    route();
+  }));
+}
+
+// ---- request type history, with Undo
+
+async function viewAiHistory(t, rawKey) {
+  const key = rawKey ? decodeURIComponent(rawKey) : "";
+  drawLoading();
+  const r = await api(withB("/ai/versions", key ? { topic_key: key } : {}));
+  if (t !== seq) return;
+  if (!key) {
+    draw(`${aiBack()}<h1>Request type history</h1>
+      <p class="lead">Every change to a request type is kept as a version. Requests stay on the version they were lodged under.</p>
+      <div class="rows">${(r.topics || []).map((tp) => `<a class="row" href="#/ai/history/${enc(tp.key)}">
+        <span class="ref">${tp.count ? esc(tp.count) + " version" + (tp.count === 1 ? "" : "s") : "No changes yet"}</span>
+        <span class="due">${tp.upcoming ? "New rules coming" : ""}</span>
+        <span class="title">${esc(tp.label)}</span>
+        <span class="status">${tp.in_force ? "Version " + esc(tp.in_force) + " in force" : "As first set up"}</span>
+      </a>`).join("")}</div>`);
+    return;
+  }
+  const versions = r.versions || [];
+  const latest = versions.find((x) => !x.withdrawn);
+  draw(`${takeFlash()}<a class="back" href="#/ai/history">← Request type history</a>
+    <h1>${esc(r.label)}</h1>
+    <p class="lead">${r.in_force ? `Version ${esc(r.in_force)} is in force.` : "No version in force yet."} ${esc(r.open_cases)} open request${r.open_cases === 1 ? "" : "s"}.</p>
+    ${versions.length ? `<ol class="versions">${versions.map((x) => `<li class="ver${x.withdrawn ? " withdrawn" : ""}">
+      <p class="ver-head"><b>Version ${esc(x.version)}</b> · ${esc(x.source_label)}${x.withdrawn ? " · withdrawn" : x.version === r.in_force ? " · in force" : x.future ? " · coming" : ""}</p>
+      <p class="small muted">${x.effective_text === "from the start" ? "From the start" : "In force from " + esc(x.effective_text)}${x.by ? " · " + esc(x.by) : ""}${x.doc_title ? " · " + esc(x.doc_title) : ""}${x.offered ? "" : " · no longer offered"}</p>
+      ${x.note ? `<p class="small">${esc(x.note)}</p>` : ""}
+      ${r.can_undo && latest && x.id === latest.id ? `<p class="error" role="alert"></p><button type="button" class="btn small danger" id="undo">${x.future ? "Withdraw it" : "Undo"}</button>` : ""}
+    </li>`).join("")}</ol>` : '<p class="muted">No changes yet.</p>'}`);
+  const undo = $("#undo");
+  if (undo) confirmTap(undo, "Tap again to undo", () => busy(undo, $(".error", undo.closest("li")), async () => {
+    const res = await api("/ai/versions/undo", { body: { b: state.b, topic_key: key } });
+    state.flash = res.withdrawn ? "Withdrawn. It won't come into force." : "Undone: the version before is back in force now.";
+    route();
+  }));
+}
+
+// ---- ask about your by-laws (committee)
+
+function answerHtml(q) {
+  const pending = q.status === "pending";
+  return `<article class="answer">
+    <p class="a-q">${esc(q.question)}</p>
+    <p class="small muted">${esc(q.asked_by)} · ${esc(fmtWhen(q.asked))}${q.escalated && !pending ? " · checked more carefully" : ""}</p>
+    <p class="guidance">${esc(AI_GUIDANCE)}</p>
+    ${pending ? '<p class="draft">Checking more carefully — usually under an hour. We\'ll email you.</p>' : ""}
+    ${!pending && (q.unconfirmed || q.status === "unconfirmed" || q.status === "stopped_budget") ? `<p class="unconfirmed-banner"><b>UNCONFIRMED.</b> ${q.status === "stopped_budget" ? "The month's AI budget ran out before it could be checked more carefully." : "The AI couldn't back this with the exact words of a clause. Ask your body corporate manager or lawyer."}</p>` : ""}
+    ${q.answer && !pending ? `<p class="a-text">${lines(q.answer)}</p>` : ""}
+    ${pending ? "" : citationsHtml(q.citations)}
+  </article>`;
+}
+
+async function viewAsk(t) {
+  drawLoading();
+  const r = await api(withB("/ai/questions"));
+  if (t !== seq) return;
+  const qs = r.questions || [];
+  draw(`${takeFlash()}${aiBack()}<h1>Ask about your by-laws</h1>
+    <p class="lead">Answers come from this building's CMS and by-laws and the Queensland rules, with the clause quoted.</p>
+    <form id="ask" class="card ask-box" novalidate>
+      <label for="ask-q">Your question</label>
+      <textarea id="ask-q" rows="3" maxlength="2000" placeholder="Can we refuse a second dog in unit 12?"></textarea>
+      <p class="small muted">Don't include names or contact details.</p>
+      <p class="error" role="alert"></p>
+      <button class="btn" type="submit">Ask</button>
+    </form>
+    <section class="card"><h2>Asked before</h2>${qs.length ? qs.map(answerHtml).join("") : '<p class="muted">Nothing asked yet.</p>'}</section>`);
+  const f = $("#ask");
+  f.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const question = $("#ask-q").value.trim();
+    if (!question) { $(".error", f).textContent = "Type your question."; return; }
+    busy($("button", f), $(".error", f), async () => {
+      const res = await api("/ai/ask", { body: { b: state.b, question } });
+      state.flash = res.status === "pending" ? "That one needs a closer look. We'll email you when it's answered." : "";
+      route();
+    });
+  });
+}
+
+// ---- Settings → AI (admin)
+
+async function viewAiSettings(t) {
+  drawLoading();
+  const r = await api(withB("/ai/settings"));
+  if (t !== seq) return;
+  const s = r.settings;
+  const b = r.budget;
+  draw(`${takeFlash()}<a class="back" href="#/settings">← Settings</a><h1>AI helper</h1>
+    <p class="notice-plain">${esc(r.notice)}</p>
+    <form id="ais" class="card" novalidate>
+      <label class="switch"><input type="checkbox" id="ais-on"${s.enabled ? " checked" : ""}${r.can_edit ? "" : " disabled"}><span class="switch-ui" aria-hidden="true"></span><span id="ais-on-text">${s.enabled ? "On for this building" : "Off for this building"}</span></label>
+      <label for="ais-who">Who approves the AI's proposals?</label>
+      <select id="ais-who"${r.can_edit ? "" : " disabled"}>${r.approvers.map((a) => `<option value="${esc(a.key)}"${a.key === s.approver ? " selected" : ""}>${esc(a.label)}</option>`).join("")}</select>
+      <label for="ais-cap">Monthly limit, A$ <span class="opt">(empty = the standard ${esc(money(s.default_cap_aud))})</span></label>
+      <input id="ais-cap" type="number" min="0" max="1000" step="1" inputmode="decimal" value="${s.monthly_cap_aud === null ? "" : esc(s.monthly_cap_aud)}"${r.can_edit ? "" : " disabled"}>
+      <p class="error" role="alert"></p>
+      ${r.can_edit ? '<button class="btn block" type="submit">Save</button>' : ""}
+    </form>
+    <section class="card"><h2>This month</h2>
+      <p class="spend"><span class="spend-big">${esc(money(b.spent_aud))}</span> of ${esc(money(b.cap_aud))} used in ${esc(b.month_name)}.</p>
+      ${b.stopped && b.cap_aud > 0 ? `<p class="draft">This building's AI budget for ${esc(b.month_name)} is used up. Nothing is sent until next month or until the limit is raised.</p>` : b.warn ? '<p class="draft">Over 80% of the limit is used.</p>' : ""}
+      <p class="small muted">${esc(r.guidance)}</p>
+    </section>`);
+  const f = $("#ais");
+  $("#ais-on").addEventListener("change", (ev) => { $("#ais-on-text").textContent = ev.target.checked ? "On for this building" : "Off for this building"; });
+  f.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const capText = $("#ais-cap").value.trim();
+    busy($('button[type="submit"]', f), $(".error", f), async () => {
+      await api("/ai/settings", { body: { b: state.b, enabled: $("#ais-on").checked, approver: $("#ais-who").value, monthly_cap_aud: capText === "" ? null : Number(capText) } });
+      state.me = null;      // the menu changes with the switch
+      state.flash = "Saved.";
       route();
     });
   });

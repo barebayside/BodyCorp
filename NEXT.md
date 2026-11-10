@@ -9,6 +9,10 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
 - **Success looks like:** Michael's committee and building manager run Altai's requests through it, on time and on record.
 
 ## Next
+0. **Decided 2026-11-10 (Edward): the address is `bodycorp.barebaysidelabs.com`**, mapped to the live copy in the
+   Catalyst console; DNS lines go in VentraIP (barebaysidelabs.com). Email sends from a barebaysidelabs.com address
+   with the domain verified in Catalyst Mail (SPF include ADDED to the existing Zoho Mail SPF line, never a second
+   SPF record; plus the DKIM record). A product domain comes later, once the product is named.
 1. **Edward: verify the email sender.** Catalyst console (signed in as edward@barebaysidelabs.com) → BodyCorp →
    Cloud Scale → Mail → Email configuration → `edward@barebaysidelabs.com` → Verify (code is in your inbox, from
    noreply@notifications.zohocatalyst.com.au). Until then no email goes out, so nobody can sign in by code.

@@ -62,10 +62,10 @@ def portal_link(building):
     return "{}?b={}".format(base, building["slug"]) if building else base
 
 
-def page(building, heading, lines, button=None):
+def page(building, heading, lines, button=None, link=None):
     """
     One email body. `lines` are plain strings (escaped here); `button` is a label
-    for a link to the portal, left out when PORTAL_URL isn't set. Colour and size
+    for a link to the portal (or to `link`, e.g. one request), left out when PORTAL_URL isn't set. Colour and size
     are set once on the body block and inherited, to keep the HTML small.
     """
     brand = (building or {}).get("brand") or {}
@@ -74,7 +74,7 @@ def page(building, heading, lines, button=None):
     footer = _text(brand.get("footer") or (building or {}).get("name") or "")
     paragraphs = "".join('<p style="margin:0 0 14px">{}</p>'.format(_text(line).replace("\n", "<br>"))
                          for line in lines if line)
-    link = portal_link(building)
+    link = link or portal_link(building)
     action = ""
     if button and link:
         action = ('<p style="margin:22px 0"><a href="{}" style="background:{};color:#fff;padding:12px 20px;'

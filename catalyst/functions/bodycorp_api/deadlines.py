@@ -25,9 +25,15 @@ def _utc(value):
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def due_at(created_utc, days):
-    """End of the Brisbane day `days` after `created_utc`, as a naive UTC datetime."""
+def due_at(created_utc, days, business_day=False):
+    """
+    End of the Brisbane day `days` after `created_utc`, as a naive UTC datetime.
+    `business_day`: a last day on a Saturday or Sunday moves to the Monday (AIA s 38(2), law file §8
+    "Counting days"). Public holidays are not known to the portal, so they are not skipped.
+    """
     day = _utc(created_utc).astimezone(BRISBANE).date() + timedelta(days=int(days))
+    while business_day and day.weekday() >= 5:
+        day += timedelta(days=1)
     end = datetime.combine(day, time(23, 59, 59), tzinfo=BRISBANE)
     return end.astimezone(timezone.utc).replace(tzinfo=None)
 
@@ -62,23 +68,38 @@ def _due_soon(db, building, now_utc):
     return sorted(out, key=lambda pair: pair[0])
 
 
-def _line(left, row, labels):
+def _line(left, row, labels, topic=None, now=None):
+    """One case in a digest, with what happens if nobody decides (the topic's own words)."""
+    import stages  # here, not at the top: stages reads this module's clock helpers
     when = "OVERDUE by {} day(s)".format(-left) if left < 0 else ("due TODAY" if left == 0 else
                                                                    "due in {} day(s)".format(left))
-    return "{} · {} · {} · {}".format(row.get("Ref"), row.get("Title"), labels.get(str(row.get("Unit_Id")), ""), when)
+    missed = stages.missed(topic, row, now) if topic and now else None
+    return "{} · {} · {} · {}{}".format(row.get("Ref"), row.get("Title"), labels.get(str(row.get("Unit_Id")), ""),
+                                        when, " · " + missed["card"] if missed and missed["card"] else "")
 
 
-def remind(db, now_utc):
-    """One digest per handler per building of open cases due within 7 days or overdue. Returns emails sent."""
+def remind(db, now_utc, extra=None):
+    """
+    One digest per handler per building of open cases due within 7 days or overdue. Returns emails sent.
+    `extra(building)` may add {email: [lines]} (tasks and minutes due, from main) to the same digests.
+    """
     sent = 0
     for building in (buildings.from_row(r) for r in db.find(store.BUILDINGS)):
         labels, digests = None, {}
+        every = None
         for left, row in _due_soon(db, building, now_utc):
             labels = labels if labels is not None else buildings.unit_labels(db, building)
+            if every is None:
+                import topics
+                every = {t["key"]: t for t in topics.all_topics(db, building)}
             for email in handler_emails(db, building, row.get("Handler")):
-                digests.setdefault(email, []).append(_line(left, row, labels))
+                digests.setdefault(email, []).append(_line(left, row, labels, every.get(row.get("Topic_Key")),
+                                                           now_utc))
+        for email, lines in ((extra(building) if extra else None) or {}).items():
+            digests.setdefault(email, []).extend(lines)
         for email, lines in sorted(digests.items()):
             body = mailer.page(building, "Requests due soon", lines, "Open the inbox")
-            subject = "{}: {} request(s) due soon or overdue".format(building["name"], len(lines))
+            subject = "{}: {} item(s) due soon or overdue".format(building["name"], len(lines)) if any(
+                line.startswith(("Task:", "Minutes:")) for line in lines) else                 "{}: {} request(s) due soon or overdue".format(building["name"], len(lines))
             sent += 1 if mailer.send(db, email, subject, body, building=building) else 0
     return sent

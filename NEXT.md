@@ -25,6 +25,15 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
    phone notifications by Web Push (VAPID keys as env vars; a subscriptions table; iPhone needs iOS 16.4+ and the
    app added to the Home Screen first), an "Add to Home Screen" prompt with iPhone/Android steps, email stays as
    the fallback. Prove it on a real iPhone and a real Android in the go-live check.
+0d. **Committee working view: built 2026-11-10, not yet deployed** (spec
+   `docs/superpowers/specs/2026-11-10-committee-pipeline-design.md`). Board, stage buttons that email and move a
+   request on, votes outside a meeting, meetings, minutes, tasks. Tables `Motions`, `Ballots`, `Meetings`, `Tasks`
+   and column `Cases.Stage` already exist on the test copy. To turn it on: deploy functions and client, then as admin
+   `POST /admin/topics {b:"altai", from_seed:"altai"}` (copies the seed's stages, deadlines and vote rules onto
+   Altai's existing topics, keeps label/field edits, dates open cases that newly have a clock). Then Edward gives
+   people positions (Members → Give someone a role: Chair, Secretary, Treasurer, Committee member) and, once the CMS
+   arrives, records the regulation module and the secretary's contact address (Board → Who does what). Until the
+   module is recorded admins see "Module not recorded — committee rules are guidance only".
 1. **Edward: verify the email sender.** Catalyst console (signed in as edward@barebaysidelabs.com) → BodyCorp →
    Cloud Scale → Mail → Email configuration → `edward@barebaysidelabs.com` → Verify (code is in your inbox, from
    noreply@notifications.zohocatalyst.com.au). Until then no email goes out, so nobody can sign in by code.
@@ -44,7 +53,7 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
    be set again on Production).
 
 ## Later (v2)
-Online voting · invite an outside advisor to one matter (advice saved for next time) · a real inbound email address
+General-meeting and AGM voting · notices of opposition as a form · owners opting out of committee advice · invite an outside advisor to one matter (advice saved for next time) · a real inbound email address
 per building · the building's own web address · pull out the reusable kit.
 
 ## How it runs
@@ -64,4 +73,18 @@ per building · the building's own web address · pull out the reusable kit.
 - Failed emails are queued in `Mail_Queue` and retried (5 min, 30 min, 2 h, 6 h; gives up after 5 tries), and
   every failure or crash is a row in `Failures`. Admins see theirs at `GET /failures`; whoever is an admin and
   signs in as `SUPPORT_EMAIL` sees every building's with `?all=1`. Public `GET /status` for an outside monitor.
-- Tests: `py -3.9 -m pytest -q tests` (84 pass). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.
+- Committee working view (2026-11-10). Positions are roles: `chair`, `secretary`, `treasurer`, `member` (voting);
+  `committee` = committee access with no vote. Which position does which step is `Buildings.Settings.duties`
+  (defaults in `committee.py`: secretary acknowledges, sends votes and notices, takes minutes, answers records
+  requests; chair runs meetings; every voting member votes). Stages, buttons, email wording, deadlines and what
+  silence means are topic data (`topics.py` docstring; Altai's in `seed_altai.json`).
+  Routes: `GET /board`, `POST /case/action {id, action, note}`, `GET /committee`, `POST /committee/settings`,
+  `GET /votes`, `GET /vote`, `POST /votes`, `POST /vote/ballot`, `GET /meetings`, `GET /meeting`, `POST /meetings`,
+  `POST /meeting/attendance|motion|vote|close|minutes|minutes/issue`, `GET /tasks`, `POST /tasks`, `POST /task/done`
+  (shapes in the `main.py` docstring). Portal screens: `#/board`, `#/votes`, `#/vote/<id>`, `#/meetings`,
+  `#/meeting/<id>`, `#/minutes/<id>`, `#/tasks`, `#/committee`.
+- The daily reminders now also settle votes whose 21 days are up, decide cases past a deadline whose topic says
+  "deemed approved" or "not agreed" (and email the resident), and add tasks and draft minutes due to the digests.
+- Headless check of the committee screens: `py -3.9 <scratchpad>/mock/mock_api.py catalyst/client 8790 --real`
+  runs the real function code over the tests' fake store (sign in with any seeded email, code 123456).
+- Tests: `py -3.9 -m pytest -q tests` (84 pass before the committee view; 122 with it, plus other sessions' tests). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.

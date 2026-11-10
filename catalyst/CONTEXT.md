@@ -27,3 +27,7 @@ failure (Catalyst returns an empty 200 when a function runs out of memory).
 - Catalyst stamps CREATEDTIME in Brisbane time, not UTC (`store.created_iso`).
 - ZCQL returns at most 300 rows: every read pages by ROWID. Text columns cap at 10,000 characters.
 - A deploy pushes `catalyst-config.json` env vars, replacing what's set in the console.
+- `Result` is a reserved word: Create_Column refuses the whole batch ("Column name cannot contain reserved
+  keywords") and creates none of it. The vote result column is `Motions.Tally`.
+- The fake store keeps whatever type `update` was given (an int id stays an int); Catalyst gives strings back.
+  Compare ids as `str(...)` in tests.

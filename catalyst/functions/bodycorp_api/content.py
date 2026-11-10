@@ -72,7 +72,7 @@ def audience_emails(db, building, audience):
     rows = db.find(store.MEMBERSHIPS, {"Building_Id": int(building["id"]), "Status": "approved"})
     ids = {str(m.get("User_Id")) for m in rows if audience == "all" or m.get("Relation") == "owner"}
     emails = {(db.get(store.USERS, i) or {}).get("Email") for i in sorted(ids)}
-    emails |= set(people.emails_with_roles(db, building, ("committee", "manager", "admin")))
+    emails |= set(people.emails_with_roles(db, building, ("committee", "manager", "admin")))   # + positions
     return sorted(e for e in emails if e)
 
 
@@ -146,4 +146,6 @@ def doc_file(db, building, ctx, doc_id):
     data = db.get_file(row.get("File_Key"))
     if data is None:
         raise not_found("That document wasn't found.")
-    return data, uploads.sniff(data) or "application/octet-stream", row.get("File_Name") or "document"
+    name = row.get("File_Name") or "document"
+    kind = uploads.sniff(data) or ("text/plain; charset=utf-8" if name.endswith(".txt") else "application/octet-stream")
+    return data, kind, name   # .txt = minutes the portal wrote itself (meetings.issue_minutes)

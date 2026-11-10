@@ -9,7 +9,13 @@ Who someone is in a building: their units (claimed, then approved) and their rol
 so nothing about access is ever remembered between calls.
 
 ROLES (per building)
-    committee, manager   handle cases of that handler type; post notices and documents
+    chair, secretary,    committee POSITIONS: voting members of the committee (law file §2, SM s 9).
+    treasurer, member    One vote each however many positions a person holds (SM s 65(5)).
+                         They handle committee cases; which position does which step is the
+                         building's duty map (committee.py), not fixed here.
+    committee            committee access WITHOUT a vote (e.g. a body corporate manager, SM s 12)
+    manager              the building manager: handles manager cases
+    committee, manager   both post notices and documents
     approver             approves and removes unit claims
     admin                everything in that building
 """
@@ -21,7 +27,9 @@ import store
 from errors import bad, forbidden, not_found
 
 RELATIONS = ("owner", "tenant")
-ROLE_NAMES = ("committee", "manager", "approver", "admin")
+POSITIONS = ("chair", "secretary", "treasurer", "member")
+ROLE_NAMES = POSITIONS + ("committee", "manager", "approver", "admin")
+COMMITTEE_ROLES = POSITIONS + ("committee",)
 HANDLER_ROLES = ("committee", "manager")
 MAX_CLAIMS = 20
 
@@ -38,11 +46,18 @@ def context(db, user, building):
     approved = [m for m in memberships if m.get("Status") == "approved"]
     unit_ids = {str(m["Unit_Id"]) for m in approved}
     owner_unit_ids = {str(m["Unit_Id"]) for m in approved if m.get("Relation") == "owner"}
-    handles = bool(roles & {"committee", "manager", "admin"})
+    handles = bool(roles & (set(COMMITTEE_ROLES) | {"manager", "admin"}))
+    voting = bool(roles & set(POSITIONS))
+    unfinancial = {str(u) for u in (building.get("settings") or {}).get("unfinancial") or []}
+    committee = bool(roles & set(COMMITTEE_ROLES)) or "admin" in roles
     return {
         "user": user, "user_id": str(user["id"]), "building": building, "roles": roles,
         "memberships": memberships, "unit_ids": unit_ids, "owner_unit_ids": owner_unit_ids,
         "relations": {m.get("Relation") for m in approved},
+        # The committee side, kept apart from "can" so the page's v1 shape is unchanged.
+        # A voting member who owes a body corporate debt can't vote (SM s 64, s 67).
+        "cmt": {"committee": committee, "voting": voting, "vote": voting and str(user["id"]) not in unfinancial,
+                "positions": sorted(roles & set(POSITIONS))},
         "can": {"submit": bool(unit_ids), "handle": handles,
                 "approve": bool(roles & {"approver", "admin"}), "admin": "admin" in roles,
                 # Committee and managers post owner-only documents, so they must see them too.
@@ -67,14 +82,21 @@ def me(db, ctx):
     labels = buildings.unit_labels(db, ctx["building"])
     return {"user": ctx["user"], "roles": sorted(ctx["roles"]),
             "memberships": [_membership_out(m, labels) for m in ctx["memberships"] if m.get("Status") != "removed"],
-            "can": ctx["can"]}
+            "can": ctx["can"], "committee": ctx["cmt"]}
+
+
+def ids_with_roles(db, building, wanted):
+    """User ids (strings) of everyone in the building holding any of `wanted` roles."""
+    return sorted({str(r.get("User_Id")) for r in db.find(store.ROLES, {"Building_Id": int(building["id"])})
+                   if r.get("Role") in wanted})
 
 
 def emails_with_roles(db, building, wanted):
     """Email addresses of everyone in the building holding any of `wanted` roles."""
-    ids = {str(r.get("User_Id")) for r in db.find(store.ROLES, {"Building_Id": int(building["id"])})
-           if r.get("Role") in wanted}
-    users = (db.get(store.USERS, i) for i in sorted(ids))
+    wanted = tuple(wanted)
+    if "committee" in wanted:          # a committee case goes to the positions too
+        wanted = wanted + POSITIONS
+    users = (db.get(store.USERS, i) for i in ids_with_roles(db, building, wanted))
     return sorted({u.get("Email") for u in users if u and u.get("Email")})
 
 

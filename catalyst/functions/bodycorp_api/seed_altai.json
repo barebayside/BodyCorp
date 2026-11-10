@@ -1,125 +1,1264 @@
 {
-  "_note": "Altai on the Park. Units 1-10 are PLACEHOLDERS: replace them with the roll (POST /admin/units). Every topic is DRAFT until checked against Altai's CMS and by-laws.",
-  "building": {
-    "slug": "altai",
-    "name": "Altai on the Park",
-    "scheme_no": "",
-    "brand": {"primary": "#1f4d3a", "accent": "#c9a227", "logo_url": "", "footer": "Altai on the Park"},
-    "settings": {"ref_prefix": "ALT", "state": "QLD", "timezone": "Australia/Brisbane", "units_are_placeholders": true}
+ "_note": "Altai on the Park. Units 1-10 are PLACEHOLDERS: replace them with the roll (POST /admin/units). Every topic is DRAFT until checked against Altai's CMS and by-laws.",
+ "building": {
+  "slug": "altai",
+  "name": "Altai on the Park",
+  "scheme_no": "",
+  "brand": {
+   "primary": "#1f4d3a",
+   "accent": "#c9a227",
+   "logo_url": "",
+   "footer": "Altai on the Park"
   },
-  "units": [
-    {"unit_no": "1", "lot_no": ""}, {"unit_no": "2", "lot_no": ""}, {"unit_no": "3", "lot_no": ""},
-    {"unit_no": "4", "lot_no": ""}, {"unit_no": "5", "lot_no": ""}, {"unit_no": "6", "lot_no": ""},
-    {"unit_no": "7", "lot_no": ""}, {"unit_no": "8", "lot_no": ""}, {"unit_no": "9", "lot_no": ""},
-    {"unit_no": "10", "lot_no": ""}
-  ],
-  "topics": [
-    {"key": "pet", "sort": 10, "definition": {
-      "label": "Keep a pet", "audience": ["owner", "tenant"], "handler": "committee", "draft": true,
-      "intro": "Tell the committee about the animal you want to keep.",
-      "fields": [
-        {"key": "animal", "label": "What animal?", "type": "text", "required": true},
-        {"key": "breed_size", "label": "Breed and size", "type": "text", "required": false},
-        {"key": "how_many", "label": "How many?", "type": "select", "options": ["1", "2", "3 or more"], "required": true},
-        {"key": "where_kept", "label": "Where will it be kept?", "type": "textarea", "required": true},
-        {"key": "registered", "label": "It is registered with the council (dogs/cats)", "type": "checkbox", "required": false},
-        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
-      "deadline": {"days": 21, "if_missed": "May be treated as approved (BCCM Standard Module, animals) — DRAFT, to be checked against Altai's by-laws"},
-      "steps": [
-        {"title": "Check the request against the animals by-law", "rule": "By-law (animals) — DRAFT"},
-        {"title": "Ask for anything missing (registration, photos)", "rule": "Committee practice — DRAFT"},
-        {"title": "Decide, with reasons if refused, before the deadline", "rule": "BCCM Standard Module — DRAFT"},
-        {"title": "Tell the resident and record any conditions", "rule": "Committee practice — DRAFT"}]}},
-    {"key": "renovation", "sort": 20, "definition": {
-      "label": "Renovation or alteration", "audience": ["owner"], "handler": "committee", "draft": true,
-      "intro": "Tell the committee what you plan to change in your unit.",
-      "fields": [
-        {"key": "work", "label": "What work?", "type": "textarea", "required": true},
-        {"key": "affects_common", "label": "Does it touch common property (walls, floors, pipes, balcony)?", "type": "select", "options": ["Yes", "No", "Not sure"], "required": true},
-        {"key": "flooring", "label": "Changing hard flooring?", "type": "checkbox", "required": false},
-        {"key": "tradie", "label": "Licensed tradesperson (name and licence)", "type": "text", "required": false},
-        {"key": "start", "label": "Planned start", "type": "date", "required": false},
-        {"key": "end", "label": "Planned finish", "type": "date", "required": false},
-        {"key": "plans", "label": "Plans or quote", "type": "file", "required": false}],
-      "steps": [
-        {"title": "Check whether it touches common property", "rule": "BCCM Act / CMS — DRAFT"},
-        {"title": "Check the by-laws on alterations, flooring and noise", "rule": "By-laws — DRAFT"},
-        {"title": "Ask for licences, insurance and plans if missing", "rule": "Committee practice — DRAFT"},
-        {"title": "Decide: committee, or a general meeting if required", "rule": "BCCM Standard Module — DRAFT"},
-        {"title": "Tell the owner and record any conditions", "rule": "Committee practice — DRAFT"}]}},
-    {"key": "incident", "sort": 30, "definition": {
-      "label": "Report an accident or incident", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
-      "intro": "Tell the building manager what happened. In an emergency call 000 first.",
-      "fields": [
-        {"key": "when", "label": "When did it happen?", "type": "date", "required": true},
-        {"key": "where", "label": "Where?", "type": "text", "required": true},
-        {"key": "what", "label": "What happened?", "type": "textarea", "required": true},
-        {"key": "injured", "label": "Was anyone hurt?", "type": "select", "options": ["No", "Yes", "Not sure"], "required": true},
-        {"key": "damage", "label": "Was anything damaged?", "type": "textarea", "required": false},
-        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
-      "steps": [
-        {"title": "Make the area safe", "rule": "Work health and safety — DRAFT"},
-        {"title": "Record the details and photos", "rule": "Building manager practice — DRAFT"},
-        {"title": "Tell the committee and, if needed, the insurer", "rule": "Insurance — DRAFT"},
-        {"title": "Arrange any repair", "rule": "Building manager agreement — DRAFT"}]}},
-    {"key": "maintenance", "sort": 40, "definition": {
-      "label": "Maintenance or repair", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
-      "intro": "Tell the building manager what needs fixing on common property.",
-      "fields": [
-        {"key": "where", "label": "Where is it?", "type": "text", "required": true},
-        {"key": "problem", "label": "What's wrong?", "type": "textarea", "required": true},
-        {"key": "urgent", "label": "Is it urgent (water, power, security)?", "type": "select", "options": ["No", "Yes"], "required": true},
-        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
-      "steps": [
-        {"title": "Check whether it is common property or the lot owner's", "rule": "BCCM Standard Module — DRAFT"},
-        {"title": "Arrange the repair or a quote", "rule": "Building manager agreement — DRAFT"},
-        {"title": "Tell the resident when it is fixed", "rule": "Building manager practice — DRAFT"}]}},
-    {"key": "bylaw", "sort": 50, "definition": {
-      "label": "By-law concern or complaint", "audience": ["owner", "tenant"], "handler": "committee", "draft": true,
-      "intro": "Tell the committee about a by-law problem (noise, parking, rubbish, pets...).",
-      "fields": [
-        {"key": "kind", "label": "What kind of problem?", "type": "select", "options": ["Noise", "Parking", "Rubbish", "Pets", "Smoking", "Other"], "required": true},
-        {"key": "where_who", "label": "Where, and which unit if you know", "type": "text", "required": false},
-        {"key": "what", "label": "What happened, and when?", "type": "textarea", "required": true},
-        {"key": "before", "label": "Has it happened before?", "type": "checkbox", "required": false},
-        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
-      "steps": [
-        {"title": "Check which by-law applies", "rule": "By-laws — DRAFT"},
-        {"title": "Talk to the person or send a friendly letter", "rule": "Committee practice — DRAFT"},
-        {"title": "If it continues, consider a contravention notice", "rule": "BCCM Act (contravention notices) — DRAFT"},
-        {"title": "Tell the resident what was done", "rule": "Committee practice — DRAFT"}]}},
-    {"key": "moving", "sort": 60, "definition": {
-      "label": "Moving in or out / lift booking", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
-      "intro": "Book the lift and loading area for a move or a big delivery.",
-      "fields": [
-        {"key": "kind", "label": "What is it?", "type": "select", "options": ["Moving in", "Moving out", "Big delivery"], "required": true},
-        {"key": "date", "label": "Date", "type": "date", "required": true},
-        {"key": "time", "label": "Time (from - to)", "type": "text", "required": true},
-        {"key": "removalist", "label": "Removalist or company", "type": "text", "required": false}],
-      "steps": [
-        {"title": "Check the lift and loading area are free", "rule": "Building manager practice — DRAFT"},
-        {"title": "Confirm the booking and lift padding", "rule": "By-laws (moving) — DRAFT"},
-        {"title": "Check for damage afterwards", "rule": "Building manager practice — DRAFT"}]}},
-    {"key": "records", "sort": 70, "definition": {
-      "label": "Ask for body corporate records", "audience": ["owner"], "handler": "committee", "draft": true,
-      "intro": "Ask to see or get copies of body corporate records (minutes, roll, accounts...).",
-      "fields": [
-        {"key": "which", "label": "Which records?", "type": "textarea", "required": true},
-        {"key": "how", "label": "How would you like them?", "type": "select", "options": ["Email copies", "Inspect in person"], "required": true}],
-      "deadline": {"days": 7, "if_missed": "Records should be made available within 7 days of the request (BCCM Act, records) — DRAFT, to be checked"},
-      "steps": [
-        {"title": "Check the person may see these records", "rule": "BCCM Act (records) — DRAFT"},
-        {"title": "Work out any fee", "rule": "BCCM Regulation (fees) — DRAFT"},
-        {"title": "Send copies or arrange inspection before the deadline", "rule": "BCCM Act (records) — DRAFT"}]}},
-    {"key": "other", "sort": 80, "definition": {
-      "label": "Something else", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
-      "intro": "Anything that doesn't fit the other forms.",
-      "fields": [
-        {"key": "subject", "label": "What is it about?", "type": "text", "required": true},
-        {"key": "details", "label": "Details", "type": "textarea", "required": true},
-        {"key": "file", "label": "Photo or document", "type": "file", "required": false}],
-      "steps": [
-        {"title": "Work out who should handle it", "rule": "Building manager practice — DRAFT"},
-        {"title": "Reply to the resident", "rule": "Building manager practice — DRAFT"}]}}
-  ]
+  "settings": {
+   "ref_prefix": "ALT",
+   "state": "QLD",
+   "timezone": "Australia/Brisbane",
+   "units_are_placeholders": true
+  }
+ },
+ "units": [
+  {
+   "unit_no": "1",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "2",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "3",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "4",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "5",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "6",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "7",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "8",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "9",
+   "lot_no": ""
+  },
+  {
+   "unit_no": "10",
+   "lot_no": ""
+  }
+ ],
+ "topics": [
+  {
+   "key": "pet",
+   "sort": 10,
+   "definition": {
+    "label": "Keep a pet",
+    "audience": [
+     "owner",
+     "tenant"
+    ],
+    "handler": "committee",
+    "draft": true,
+    "intro": "Tell the committee about the animal you want to keep.",
+    "fields": [
+     {
+      "key": "animal",
+      "label": "What animal?",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "breed_size",
+      "label": "Breed and size",
+      "type": "text",
+      "required": false
+     },
+     {
+      "key": "how_many",
+      "label": "How many?",
+      "type": "select",
+      "options": [
+       "1",
+       "2",
+       "3 or more"
+      ],
+      "required": true
+     },
+     {
+      "key": "where_kept",
+      "label": "Where will it be kept?",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "registered",
+      "label": "It is registered with the council (dogs/cats)",
+      "type": "checkbox",
+      "required": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo",
+      "type": "file",
+      "required": false
+     }
+    ],
+    "deadline": {
+     "days": 21,
+     "business_day": true,
+     "outcome": "deemed_approved",
+     "card": "auto-approves after {short_date}",
+     "banner": "If the committee hasn't decided by the end of {date}, this pet request is treated as APPROVED.",
+     "citation": "SM s 58A(2), s 69(1)(b)(ii), s 69(3)(b); law file §5-6 — DRAFT",
+     "if_missed": "Treated as approved if not decided within 21 days of the request (SM s 58A, s 69(3)(b)) — DRAFT, to be checked against Altai's by-laws"
+    },
+    "steps": [
+     {
+      "title": "Check the request against the animals by-law",
+      "rule": "By-law (animals) — DRAFT"
+     },
+     {
+      "title": "Ask for anything missing (registration, photos)",
+      "rule": "Committee practice — DRAFT"
+     },
+     {
+      "title": "Decide, with reasons if refused, before the deadline",
+      "rule": "BCCM Standard Module — DRAFT"
+     },
+     {
+      "title": "Tell the resident and record any conditions",
+      "rule": "Committee practice — DRAFT"
+     }
+    ],
+    "vote": {
+     "animal": true,
+     "if_passed": "approved",
+     "if_defeated": null,
+     "if_no_result": "deemed_approved"
+    },
+    "after_decision": "decided",
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "acknowledge",
+      "status": "new",
+      "rule": "Given to the secretary (chair if the secretary is absent): SM s 58A(2) — DRAFT",
+      "instructions": "Check the form is complete, then acknowledge it so the resident knows it's in hand. The clock started when it was lodged, not when it was opened.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "checking",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe committee has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       },
+       {
+        "key": "ask",
+        "label": "Ask for missing details",
+        "next": "received",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What's missing?",
+        "status": "waiting_on_resident"
+       }
+      ]
+     },
+     {
+      "key": "checking",
+      "label": "Checking",
+      "owner": "acknowledge",
+      "status": "in_progress",
+      "rule": "Act s 169B(6); BCCM Office 'Animal by-laws' — DRAFT",
+      "instructions": "Check it against the animals by-law. It may be refused only for: an unacceptable health or safety risk conditions can't manage; it breaks a law; a regulated dog; unreasonable interference conditions can't manage; or the owner refuses reasonable conditions. 'No pets' is never a reason. Then put it to the committee.",
+      "buttons": [
+       {
+        "key": "vote",
+        "label": "Put it to a committee vote",
+        "next": "deciding",
+        "opens_vote": true,
+        "note": "optional",
+        "note_label": "Conditions to approve it with (optional)",
+        "motion": "That the committee approve request {ref} ({title}, {unit}).{note_line}"
+       },
+       {
+        "key": "ask",
+        "label": "Ask the resident",
+        "next": "checking",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What do you need?",
+        "status": "waiting_on_resident"
+       }
+      ]
+     },
+     {
+      "key": "deciding",
+      "label": "Committee deciding",
+      "owner": "vote",
+      "status": "with_committee",
+      "rule": "SM s 58B, s 69 — DRAFT",
+      "instructions": "Each voting member votes in the portal. A motion outside a meeting passes when a majority of ALL members entitled to vote say yes; it fails when half or more say no.",
+      "buttons": [
+       {
+        "key": "nudge",
+        "label": "Remind the committee to vote",
+        "next": "deciding",
+        "email": {
+         "to": "voting",
+         "subject": "{ref}: your vote is needed",
+         "body": "{title}, {unit}.\n\nPlease vote in the portal.{note_line}\n\n{link}"
+        },
+        "note": "optional",
+        "note_label": "Add a line (optional)"
+       }
+      ]
+     },
+     {
+      "key": "decided",
+      "label": "Decided",
+      "owner": "acknowledge",
+      "status": "decided",
+      "rule": "SM s 69(4); SM s 73(1)(e): an animal approval can be acted on at once — DRAFT",
+      "instructions": "The resident was emailed the decision when it was recorded. Note any conditions on the record, then close it.",
+      "buttons": [
+       {
+        "key": "close",
+        "label": "Close the request",
+        "next": "done"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "acknowledge",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "renovation",
+   "sort": 20,
+   "definition": {
+    "label": "Renovation or alteration",
+    "audience": [
+     "owner"
+    ],
+    "handler": "committee",
+    "draft": true,
+    "intro": "Tell the committee what you plan to change in your unit.",
+    "fields": [
+     {
+      "key": "work",
+      "label": "What work?",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "affects_common",
+      "label": "Does it touch common property (walls, floors, pipes, balcony)?",
+      "type": "select",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "required": true
+     },
+     {
+      "key": "flooring",
+      "label": "Changing hard flooring?",
+      "type": "checkbox",
+      "required": false
+     },
+     {
+      "key": "tradie",
+      "label": "Licensed tradesperson (name and licence)",
+      "type": "text",
+      "required": false
+     },
+     {
+      "key": "start",
+      "label": "Planned start",
+      "type": "date",
+      "required": false
+     },
+     {
+      "key": "end",
+      "label": "Planned finish",
+      "type": "date",
+      "required": false
+     },
+     {
+      "key": "plans",
+      "label": "Plans or quote",
+      "type": "file",
+      "required": false
+     }
+    ],
+    "steps": [
+     {
+      "title": "Check whether it touches common property",
+      "rule": "BCCM Act / CMS — DRAFT"
+     },
+     {
+      "title": "Check the by-laws on alterations, flooring and noise",
+      "rule": "By-laws — DRAFT"
+     },
+     {
+      "title": "Ask for licences, insurance and plans if missing",
+      "rule": "Committee practice — DRAFT"
+     },
+     {
+      "title": "Decide: committee, or a general meeting if required",
+      "rule": "BCCM Standard Module — DRAFT"
+     },
+     {
+      "title": "Tell the owner and record any conditions",
+      "rule": "Committee practice — DRAFT"
+     }
+    ],
+    "deadline": {
+     "days": 42,
+     "business_day": true,
+     "outcome": "not_agreed",
+     "extend_to_days": 84,
+     "card": "treated as not agreed after {short_date}",
+     "banner": "If the committee hasn't decided by the end of {date}, this owner motion is treated as NOT AGREED. The secretary can extend it once, by written notice before then, to no later than 12 weeks after it was lodged.",
+     "citation": "SM s 58(2), (3), (7) — DRAFT",
+     "if_missed": "Treated as not agreed after 6 weeks (SM s 58(7)) — DRAFT, to be checked against Altai's by-laws"
+    },
+    "vote": {
+     "animal": false,
+     "if_passed": "approved",
+     "if_defeated": "refused",
+     "if_no_result": "not_agreed"
+    },
+    "after_decision": "decided",
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "acknowledge",
+      "status": "new",
+      "rule": "An owner motion to the committee is given to the secretary: SM s 58(2) — DRAFT",
+      "instructions": "Check the form is complete, then acknowledge it so the resident knows it's in hand. The clock started when it was lodged, not when it was opened.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "checking",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe committee has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       },
+       {
+        "key": "ask",
+        "label": "Ask for missing details",
+        "next": "received",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What's missing?",
+        "status": "waiting_on_resident"
+       }
+      ]
+     },
+     {
+      "key": "checking",
+      "label": "Checking",
+      "owner": "acknowledge",
+      "status": "in_progress",
+      "rule": "SM s 52, s 58(6), s 187 — DRAFT",
+      "instructions": "Check whether it touches common property and what the by-laws say. The committee can approve an improvement only up to $3,000 installed, if it doesn't spoil the look of the building; anything bigger, or a restricted issue, goes to a general meeting. Need more time? Extend the deadline by written notice before 6 weeks are up.",
+      "buttons": [
+       {
+        "key": "vote",
+        "label": "Put it to a committee vote",
+        "next": "deciding",
+        "opens_vote": true,
+        "note": "optional",
+        "note_label": "Conditions (optional)",
+        "motion": "That the committee approve owner motion {ref} ({title}, {unit}).{note_line}"
+       },
+       {
+        "key": "extend",
+        "label": "Extend the deadline (written notice)",
+        "next": "checking",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: the committee needs more time",
+         "body": "Hi {name},\n\nThe committee needs more time to decide your motion {ref}, because: {note}\n\nThe new date for a decision is {date}.\n\n{link}"
+        },
+        "extends": true,
+        "note": "required",
+        "note_label": "Why more time is needed"
+       },
+       {
+        "key": "ask",
+        "label": "Ask the owner",
+        "next": "checking",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What do you need?",
+        "status": "waiting_on_resident"
+       }
+      ]
+     },
+     {
+      "key": "deciding",
+      "label": "Committee deciding",
+      "owner": "vote",
+      "status": "with_committee",
+      "rule": "SM s 58, s 69 — DRAFT",
+      "instructions": "Each voting member votes in the portal. A motion outside a meeting passes when a majority of ALL members entitled to vote say yes; it fails when half or more say no.",
+      "buttons": [
+       {
+        "key": "nudge",
+        "label": "Remind the committee to vote",
+        "next": "deciding",
+        "email": {
+         "to": "voting",
+         "subject": "{ref}: your vote is needed",
+         "body": "{title}, {unit}.\n\nPlease vote in the portal.{note_line}\n\n{link}"
+        },
+        "note": "optional",
+        "note_label": "Add a line (optional)"
+       }
+      ]
+     },
+     {
+      "key": "decided",
+      "label": "Decided",
+      "owner": "acknowledge",
+      "status": "decided",
+      "rule": "SM s 72-73: wait out the 7-day opposition window before acting (Standard Module) — DRAFT",
+      "instructions": "The resident was emailed the decision when it was recorded. Note any conditions on the record, then close it.",
+      "buttons": [
+       {
+        "key": "close",
+        "label": "Close the request",
+        "next": "done"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "acknowledge",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "incident",
+   "sort": 30,
+   "definition": {
+    "label": "Report an accident or incident",
+    "audience": [
+     "owner",
+     "tenant"
+    ],
+    "handler": "manager",
+    "draft": true,
+    "intro": "Tell the building manager what happened. In an emergency call 000 first.",
+    "fields": [
+     {
+      "key": "when",
+      "label": "When did it happen?",
+      "type": "date",
+      "required": true
+     },
+     {
+      "key": "where",
+      "label": "Where?",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "what",
+      "label": "What happened?",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "injured",
+      "label": "Was anyone hurt?",
+      "type": "select",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "required": true
+     },
+     {
+      "key": "damage",
+      "label": "Was anything damaged?",
+      "type": "textarea",
+      "required": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo",
+      "type": "file",
+      "required": false
+     }
+    ],
+    "steps": [
+     {
+      "title": "Make the area safe",
+      "rule": "Work health and safety — DRAFT"
+     },
+     {
+      "title": "Record the details and photos",
+      "rule": "Building manager practice — DRAFT"
+     },
+     {
+      "title": "Tell the committee and, if needed, the insurer",
+      "rule": "Insurance — DRAFT"
+     },
+     {
+      "title": "Arrange any repair",
+      "rule": "Building manager agreement — DRAFT"
+     }
+    ],
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "manager",
+      "status": "new",
+      "instructions": "Check the request, then acknowledge it so the resident knows it's in hand.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe building manager has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       }
+      ]
+     },
+     {
+      "key": "working",
+      "label": "Being worked on",
+      "owner": "manager",
+      "status": "in_progress",
+      "instructions": "Do the steps. Ask the resident if anything is missing; tell them when it's done.",
+      "buttons": [
+       {
+        "key": "ask",
+        "label": "Ask the resident",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What do you need?",
+        "status": "waiting_on_resident"
+       },
+       {
+        "key": "tell",
+        "label": "Tell the committee",
+        "next": "working",
+        "email": {
+         "to": "committee",
+         "subject": "{ref}: for the committee",
+         "body": "{title}, {unit}.\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What the committee needs to know"
+       },
+       {
+        "key": "finish",
+        "label": "Tell the resident it's done",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What was done?"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "manager",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "maintenance",
+   "sort": 40,
+   "definition": {
+    "label": "Maintenance or repair",
+    "audience": [
+     "owner",
+     "tenant"
+    ],
+    "handler": "manager",
+    "draft": true,
+    "intro": "Tell the building manager what needs fixing on common property.",
+    "fields": [
+     {
+      "key": "where",
+      "label": "Where is it?",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "problem",
+      "label": "What's wrong?",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "urgent",
+      "label": "Is it urgent (water, power, security)?",
+      "type": "select",
+      "options": [
+       "No",
+       "Yes"
+      ],
+      "required": true
+     },
+     {
+      "key": "photo",
+      "label": "Photo",
+      "type": "file",
+      "required": false
+     }
+    ],
+    "steps": [
+     {
+      "title": "Check whether it is common property or the lot owner's",
+      "rule": "BCCM Standard Module — DRAFT"
+     },
+     {
+      "title": "Arrange the repair or a quote",
+      "rule": "Building manager agreement — DRAFT"
+     },
+     {
+      "title": "Tell the resident when it is fixed",
+      "rule": "Building manager practice — DRAFT"
+     }
+    ],
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "manager",
+      "status": "new",
+      "instructions": "Check the request, then acknowledge it so the resident knows it's in hand.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe building manager has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       }
+      ]
+     },
+     {
+      "key": "working",
+      "label": "Being worked on",
+      "owner": "manager",
+      "status": "in_progress",
+      "instructions": "Do the steps. Ask the resident if anything is missing; tell them when it's done.",
+      "buttons": [
+       {
+        "key": "ask",
+        "label": "Ask the resident",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What do you need?",
+        "status": "waiting_on_resident"
+       },
+       {
+        "key": "finish",
+        "label": "Tell the resident it's done",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What was done?"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "manager",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "bylaw",
+   "sort": 50,
+   "definition": {
+    "label": "By-law concern or complaint",
+    "audience": [
+     "owner",
+     "tenant"
+    ],
+    "handler": "committee",
+    "draft": true,
+    "intro": "Tell the committee about a by-law problem (noise, parking, rubbish, pets...).",
+    "fields": [
+     {
+      "key": "kind",
+      "label": "What kind of problem?",
+      "type": "select",
+      "options": [
+       "Noise",
+       "Parking",
+       "Rubbish",
+       "Pets",
+       "Smoking",
+       "Other"
+      ],
+      "required": true
+     },
+     {
+      "key": "where_who",
+      "label": "Where, and which unit if you know",
+      "type": "text",
+      "required": false
+     },
+     {
+      "key": "what",
+      "label": "What happened, and when?",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "before",
+      "label": "Has it happened before?",
+      "type": "checkbox",
+      "required": false
+     },
+     {
+      "key": "photo",
+      "label": "Photo",
+      "type": "file",
+      "required": false
+     }
+    ],
+    "steps": [
+     {
+      "title": "Check which by-law applies",
+      "rule": "By-laws — DRAFT"
+     },
+     {
+      "title": "Talk to the person or send a friendly letter",
+      "rule": "Committee practice — DRAFT"
+     },
+     {
+      "title": "If it continues, consider a contravention notice",
+      "rule": "BCCM Act (contravention notices) — DRAFT"
+     },
+     {
+      "title": "Tell the resident what was done",
+      "rule": "Committee practice — DRAFT"
+     }
+    ],
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "acknowledge",
+      "status": "new",
+      "rule": "Committee practice — DRAFT",
+      "instructions": "Check the form is complete, then acknowledge it so the resident knows it's in hand. The clock started when it was lodged, not when it was opened.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "checking",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe committee has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       },
+       {
+        "key": "ask",
+        "label": "Ask for missing details",
+        "next": "received",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What's missing?",
+        "status": "waiting_on_resident"
+       }
+      ]
+     },
+     {
+      "key": "checking",
+      "label": "Checking",
+      "owner": "acknowledge",
+      "status": "in_progress",
+      "rule": "By-laws; Act ch 3 pt 5 div 4 (contravention notices) — DRAFT",
+      "instructions": "Check which by-law applies. Start with a friendly word or letter; a contravention notice is for when it keeps happening.",
+      "buttons": [
+       {
+        "key": "committee",
+        "label": "Put it to the committee",
+        "next": "deciding",
+        "email": {
+         "to": "committee",
+         "subject": "{ref}: for the committee",
+         "body": "{title}, {unit}.\n\n{note}\n\n{link}"
+        },
+        "note": "optional",
+        "note_label": "What should the committee consider?"
+       },
+       {
+        "key": "finish",
+        "label": "Tell the resident what was done",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What was done?"
+       }
+      ]
+     },
+     {
+      "key": "deciding",
+      "label": "Committee deciding",
+      "owner": "vote",
+      "status": "with_committee",
+      "rule": "Committee practice — DRAFT",
+      "instructions": "The committee decides what to do: discuss it at a meeting or vote outside one.",
+      "buttons": [
+       {
+        "key": "finish",
+        "label": "Tell the resident what was done",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What was decided?"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "acknowledge",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "moving",
+   "sort": 60,
+   "definition": {
+    "label": "Moving in or out / lift booking",
+    "audience": [
+     "owner",
+     "tenant"
+    ],
+    "handler": "manager",
+    "draft": true,
+    "intro": "Book the lift and loading area for a move or a big delivery.",
+    "fields": [
+     {
+      "key": "kind",
+      "label": "What is it?",
+      "type": "select",
+      "options": [
+       "Moving in",
+       "Moving out",
+       "Big delivery"
+      ],
+      "required": true
+     },
+     {
+      "key": "date",
+      "label": "Date",
+      "type": "date",
+      "required": true
+     },
+     {
+      "key": "time",
+      "label": "Time (from - to)",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "removalist",
+      "label": "Removalist or company",
+      "type": "text",
+      "required": false
+     }
+    ],
+    "steps": [
+     {
+      "title": "Check the lift and loading area are free",
+      "rule": "Building manager practice — DRAFT"
+     },
+     {
+      "title": "Confirm the booking and lift padding",
+      "rule": "By-laws (moving) — DRAFT"
+     },
+     {
+      "title": "Check for damage afterwards",
+      "rule": "Building manager practice — DRAFT"
+     }
+    ],
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "manager",
+      "status": "new",
+      "instructions": "Check the request, then acknowledge it so the resident knows it's in hand.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe building manager has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       }
+      ]
+     },
+     {
+      "key": "working",
+      "label": "Being worked on",
+      "owner": "manager",
+      "status": "in_progress",
+      "instructions": "Do the steps. Ask the resident if anything is missing; tell them when it's done.",
+      "buttons": [
+       {
+        "key": "ask",
+        "label": "Ask the resident",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What do you need?",
+        "status": "waiting_on_resident"
+       },
+       {
+        "key": "finish",
+        "label": "Tell the resident it's done",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What was done?"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "manager",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "records",
+   "sort": 70,
+   "definition": {
+    "label": "Ask for body corporate records",
+    "audience": [
+     "owner"
+    ],
+    "handler": "committee",
+    "draft": true,
+    "intro": "Ask to see or get copies of body corporate records (minutes, roll, accounts...).",
+    "fields": [
+     {
+      "key": "which",
+      "label": "Which records?",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "how",
+      "label": "How would you like them?",
+      "type": "select",
+      "options": [
+       "Email copies",
+       "Inspect in person"
+      ],
+      "required": true
+     }
+    ],
+    "deadline": {
+     "days": 7,
+     "business_day": true,
+     "outcome": "none",
+     "card": "records due {short_date}",
+     "banner": "The records must be given, or an inspection offered, by the end of {date}. Missing it is an offence (up to 20 penalty units).",
+     "citation": "Act s 205(2) — DRAFT; the 7 days run from the request plus the fee",
+     "if_missed": "Records should be made available within 7 days of the request (Act s 205(2)) — DRAFT, to be checked"
+    },
+    "steps": [
+     {
+      "title": "Check the person may see these records",
+      "rule": "BCCM Act (records) — DRAFT"
+     },
+     {
+      "title": "Work out any fee",
+      "rule": "BCCM Regulation (fees) — DRAFT"
+     },
+     {
+      "title": "Send copies or arrange inspection before the deadline",
+      "rule": "BCCM Act (records) — DRAFT"
+     }
+    ],
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "records",
+      "status": "new",
+      "rule": "Act s 205(2) — DRAFT",
+      "instructions": "Owners may inspect or get copies. A tenant must first show a 'proper interest'. Fees are set by law each 1 July: owner inspection $20.70, copies $0.75 a page, no GST, nothing extra.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge and ask for the fee",
+        "next": "preparing",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: your records request",
+         "body": "Hi {name},\n\nWe have your records request {ref}. {note}\n\n{link}"
+        },
+        "note": "optional",
+        "note_label": "Fee and how to pay (optional)"
+       }
+      ]
+     },
+     {
+      "key": "preparing",
+      "label": "Getting records ready",
+      "owner": "records",
+      "status": "in_progress",
+      "rule": "Act s 205(2); SM s 233A — DRAFT",
+      "instructions": "Send copies, or offer a reasonable time and place to inspect. Only defamatory parts may be held back; privacy is not a reason.",
+      "buttons": [
+       {
+        "key": "send",
+        "label": "Send the records / inspection time",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What you're sending, or when and where to inspect"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "acknowledge",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  },
+  {
+   "key": "other",
+   "sort": 80,
+   "definition": {
+    "label": "Something else",
+    "audience": [
+     "owner",
+     "tenant"
+    ],
+    "handler": "manager",
+    "draft": true,
+    "intro": "Anything that doesn't fit the other forms.",
+    "fields": [
+     {
+      "key": "subject",
+      "label": "What is it about?",
+      "type": "text",
+      "required": true
+     },
+     {
+      "key": "details",
+      "label": "Details",
+      "type": "textarea",
+      "required": true
+     },
+     {
+      "key": "file",
+      "label": "Photo or document",
+      "type": "file",
+      "required": false
+     }
+    ],
+    "steps": [
+     {
+      "title": "Work out who should handle it",
+      "rule": "Building manager practice — DRAFT"
+     },
+     {
+      "title": "Reply to the resident",
+      "rule": "Building manager practice — DRAFT"
+     }
+    ],
+    "stages": [
+     {
+      "key": "received",
+      "label": "New",
+      "owner": "manager",
+      "status": "new",
+      "instructions": "Check the request, then acknowledge it so the resident knows it's in hand.",
+      "buttons": [
+       {
+        "key": "acknowledge",
+        "label": "Acknowledge",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we have your request",
+         "body": "Hi {name},\n\nThe building manager has your request {ref} ({title}, {unit}). We'll keep you posted.\n\n{link}"
+        }
+       }
+      ]
+     },
+     {
+      "key": "working",
+      "label": "Being worked on",
+      "owner": "manager",
+      "status": "in_progress",
+      "instructions": "Do the steps. Ask the resident if anything is missing; tell them when it's done.",
+      "buttons": [
+       {
+        "key": "ask",
+        "label": "Ask the resident",
+        "next": "working",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: we need a bit more from you",
+         "body": "Hi {name},\n\n{note}\n\nPlease reply on the request.\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What do you need?",
+        "status": "waiting_on_resident"
+       },
+       {
+        "key": "finish",
+        "label": "Tell the resident it's done",
+        "next": "done",
+        "email": {
+         "to": "resident",
+         "subject": "{ref}: an update",
+         "body": "Hi {name},\n\n{note}\n\n{link}"
+        },
+        "note": "required",
+        "note_label": "What was done?"
+       }
+      ]
+     },
+     {
+      "key": "done",
+      "label": "Done",
+      "owner": "manager",
+      "status": "closed",
+      "buttons": []
+     }
+    ]
+   }
+  }
+ ]
 }

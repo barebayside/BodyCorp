@@ -18,6 +18,7 @@ import re
 
 import auth
 import buildings
+import stages
 import store
 import topics
 from errors import ApiError, bad, forbidden
@@ -143,6 +144,40 @@ def add_units(db, ctx, building, units):
         raise bad("Send between 1 and {} units.".format(MAX_UNITS))
     _add_units(db, building, units)
     return buildings.unit_list(db, building)
+
+
+UPGRADE_KEYS = ("stages", "deadline", "vote", "after_decision")
+
+
+def upgrade_topics(db, ctx, building, seed):
+    """
+    Bring an already-loaded building's topics up to the seed's pipeline (POST /admin/topics {from_seed}).
+    Only the pipeline keys (stages, deadline, vote, after_decision) are copied over; labels, fields and
+    steps the admin may have edited are kept. A missing topic is added. Open cases of a topic that
+    newly has a deadline get one, counted from when they were lodged.
+    """
+    _admin(ctx)
+    data = _load_seed(seed)
+    have = {t["key"]: t for t in topics.all_topics(db, building)}
+    rows = {r.get("Topic_Key"): r for r in db.find(store.TOPICS, {"Building_Id": int(building["id"])})}
+    counts = {"updated": 0, "added": 0, "cases_dated": 0}
+    for item in data.get("topics") or []:
+        if item["key"] in have:
+            current = json.loads(rows[item["key"]].get("Definition") or "{}")
+            merged = dict(current, **{k: item["definition"][k] for k in UPGRADE_KEYS if k in item["definition"]})
+            topics.save(db, building, item["key"], merged, have[item["key"]]["active"], have[item["key"]]["sort"])
+            counts["updated"] += 1
+        else:
+            topics.save(db, building, item["key"], item["definition"], True, item.get("sort", 0))
+            counts["added"] += 1
+    for topic in topics.all_topics(db, building):
+        for row in db.find(store.CASES, {"Building_Id": int(building["id"]), "Topic_Key": topic["key"]}):
+            created = store.created_utc(row)
+            due = stages.due_for(topic, created) if created else None
+            if due and not row.get("Due_At") and row.get("Status") not in ("decided", "closed"):
+                db.update(store.CASES, {"ROWID": row["ROWID"], "Due_At": store.fmt_dt(due)})
+                counts["cases_dated"] += 1
+    return counts
 
 
 def save_topic(db, ctx, building, key, definition, active, sort):

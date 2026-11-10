@@ -20,6 +20,8 @@ import re
 import buildings
 import deadlines
 import mailer
+import people
+import stages
 import store
 import topics
 import uploads
@@ -31,6 +33,9 @@ STATUSES = ("new", "in_progress", "waiting_on_resident", "with_committee", "deci
 STATUS_LABELS = {"new": "New", "in_progress": "In progress", "waiting_on_resident": "Waiting on you",
                  "with_committee": "With the committee", "decided": "Decided", "closed": "Closed"}
 OUTCOMES = ("approved", "approved_with_conditions", "refused")
+OUTCOME_WORDS = {"approved": "Approved", "approved_with_conditions": "Approved with conditions", "refused": "Refused",
+                 "deemed_approved": "Treated as approved (no decision in time)",
+                 "not_agreed": "Treated as not agreed (no decision in time)"}
 MAX_ANSWER = 4000
 MAX_MESSAGE = 5000
 
@@ -118,8 +123,12 @@ def _save_files(db, building, case_row, decoded):
 
 
 def _event(db, building, case_id, user_id, kind, body, internal=False):
-    return db.insert(store.EVENTS, {"Case_Id": int(case_id), "Building_Id": int(building["id"]),
-                                    "User_Id": int(user_id), "Kind": kind, "Body": body, "Internal": internal})
+    """One line of the permanent record. No user id = the system (e.g. a deadline passing)."""
+    row = {"Case_Id": int(case_id), "Building_Id": int(building["id"]), "Kind": kind, "Body": body,
+           "Internal": internal}
+    if store.as_id(user_id):
+        row["User_Id"] = int(user_id)
+    return db.insert(store.EVENTS, row)
 
 
 def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None):
@@ -142,9 +151,10 @@ def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None
                                 for s in topic["steps"]])}
     if len(row["Answers"]) > store.TEXT_MAX:
         raise bad("Your answers are too long. Shorten them and send again.")
-    days = (topic.get("deadline") or {}).get("days")
-    if days:
-        row["Due_At"] = store.fmt_dt(deadlines.due_at(now, days))
+    due = stages.due_for(topic, now)
+    if due:
+        row["Due_At"] = store.fmt_dt(due)
+    row["Stage"] = stages.of(topic)[0].get("key") or ""
     case_row = _insert_with_ref(db, building, row)
     saved, failed = _save_files(db, building, case_row, decoded)
     if saved:
@@ -155,7 +165,8 @@ def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None
         _event(db, building, case_row["ROWID"], user["id"], "note",
                "{} file(s) couldn't be saved. Ask the resident to send them again.".format(failed), True)
     _email_handlers(db, building, case_row, "New request {}".format(case_row["Ref"]),
-                    ["{} for {}.".format(topic["label"], buildings.unit_labels(db, building).get(unit_id, ""))])
+                    ["{} for {}.".format(topic["label"], buildings.unit_labels(db, building).get(unit_id, ""))],
+                    topic, now)
     out = detail(db, building, ctx, case_row["ROWID"], now)
     if failed:
         out["warning"] = "{} file(s) couldn't be saved. Please send them in a message.".format(failed)
@@ -165,7 +176,10 @@ def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None
 # ---------- who may see and act ----------
 
 def handles(ctx, row):
-    return "admin" in ctx["roles"] or row.get("Handler") in ctx["roles"]
+    """Admins; the case's handler role; and for a committee case, every committee position too."""
+    if "admin" in ctx["roles"] or row.get("Handler") in ctx["roles"]:
+        return True
+    return row.get("Handler") == "committee" and bool(ctx["roles"] & set(people.COMMITTEE_ROLES))
 
 
 def resident_sees(ctx, row):
@@ -264,6 +278,10 @@ def detail(db, building, ctx, case_id, now=None):
                 lodged_by=lodger.get("Name") or lodger.get("Email") or "",
                 lodged_by_email=lodger.get("Email") if is_handler else None,
                 can_handle=is_handler, if_missed=(topic.get("deadline") or {}).get("if_missed"))
+    if is_handler:
+        # What happens if nobody decides, worked out from the topic's data: shown FIRST to approvers.
+        case["missed"] = stages.missed(topic, row, now)
+        case["stage"] = stages.view(db, building, ctx, topic, row)
     return {"case": case, "steps": steps, "events": _events(db, row, ctx, is_handler, names),
             "topic": {k: topic.get(k) for k in ("key", "label", "intro", "fields", "draft", "deadline")}}
 
@@ -289,12 +307,22 @@ def _resident_email(db, row):
 
 def _email_resident(db, building, row, heading, lines):
     subject = "{}: {} {}".format(building["name"], row.get("Ref"), heading)
-    mailer.send(db, _resident_email(db, row), subject, mailer.page(building, heading, lines, "See your request"),
+    mailer.send(db, _resident_email(db, row), subject,
+                mailer.page(building, heading, lines, "See your request", link=case_link(building, row, False)),
                 building=building)
 
 
-def _email_handlers(db, building, row, heading, lines):
-    body = mailer.page(building, heading, lines, "Open the inbox")
+def case_link(building, row, staff=True):
+    base = mailer.portal_link(building)
+    return "{}#/{}/{}".format(base, "case" if staff else "request", row["ROWID"]) if base else ""
+
+
+def _email_handlers(db, building, row, heading, lines, topic=None, now=None):
+    """To whoever handles the case. The first line is always what happens if nobody decides in time."""
+    topic = topic or topics.get(db, building, row.get("Topic_Key")) or {}
+    first = stages.missed_line(topic, row, now or store.utc_now())
+    body = mailer.page(building, heading, ([first] if first else []) + list(lines), "Open the request",
+                       link=case_link(building, row))
     for email in deadlines.handler_emails(db, building, row.get("Handler")):
         mailer.send(db, email, "{}: {}".format(building["name"], heading), body, building=building)
 
@@ -366,13 +394,31 @@ def decide(db, building, ctx, case_id, outcome, reasons, conditions, now=None):
         raise bad("Write the conditions.")
     if len(reasons) > MAX_MESSAGE or len(conditions) > MAX_MESSAGE:
         raise bad("That's too long.")
-    decision = {"outcome": outcome, "reasons": reasons, "conditions": conditions,
-                "by": ctx["user_id"], "at": store.fmt_dt(now)}
-    db.update(store.CASES, {"ROWID": row["ROWID"], "Status": "decided", "Decision": json.dumps(decision)})
-    words = outcome.replace("_", " ").capitalize()
-    lines = ["Decision: {}".format(words)]
-    lines += ["Conditions: " + conditions] if conditions else []
-    lines += ["Reasons: " + reasons] if reasons else []
-    _event(db, building, row["ROWID"], ctx["user_id"], "decision", "\n".join(lines))
-    _email_resident(db, building, row, "has been decided", lines)
+    apply_decision(db, building, row, outcome, reasons, conditions, ctx["user_id"], now)
     return detail(db, building, ctx, row["ROWID"], now)
+
+
+def decision_lines(decision):
+    lines = ["Decision: {}".format(OUTCOME_WORDS.get(decision.get("outcome"), decision.get("outcome")))]
+    lines += ["Conditions: " + decision["conditions"]] if decision.get("conditions") else []
+    lines += ["Reasons: " + decision["reasons"]] if decision.get("reasons") else []
+    return lines
+
+
+def apply_decision(db, building, row, outcome, reasons, conditions, by, now, extra=None):
+    """
+    Record a decision (by a person, a vote, or the clock running out), move the case to the
+    topic's after_decision stage, write the record and tell the resident in writing (SM s 69(4)).
+    `by` is a user id, or "" when the law decided it.
+    """
+    decision = dict({"outcome": outcome, "reasons": reasons, "conditions": conditions, "by": by,
+                     "at": store.fmt_dt(now)}, **(extra or {}))
+    change = {"ROWID": row["ROWID"], "Status": "decided", "Decision": json.dumps(decision)}
+    topic = topics.get(db, building, row.get("Topic_Key")) or {}
+    if topic.get("after_decision"):
+        change["Stage"] = topic["after_decision"]
+    db.update(store.CASES, change)
+    lines = decision_lines(decision)
+    _event(db, building, row["ROWID"], by, "decision", "\n".join(lines))
+    _email_resident(db, building, row, "has been decided", lines)
+    return decision

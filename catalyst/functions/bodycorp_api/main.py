@@ -4,9 +4,19 @@ BodyCorp API: one function behind the portal page.
     sign in     ->  /auth/start (code emailed)  ->  /auth/verify  ->  session token
     join        ->  /claims  ->  an approver  ->  /approvals/decide
     ask         ->  /topics  ->  /cases  ->  the handler's inbox  ->  steps, status, messages, decision
+    work it     ->  /board (columns by stage)  ->  /case  ->  /case/action (the stage's button: email + move)
+    vote        ->  /votes (open one outside a meeting)  ->  /vote/ballot  ->  result onto the case
+    meet        ->  /meetings  ->  /meeting/attendance  ->  /meeting/vote  ->  /meeting/close
+                ->  /meeting/minutes (edit)  ->  /meeting/minutes/issue (owners + Documents)
+    follow up   ->  /tasks (from resolutions)  ->  /task/done
+    committee   ->  /committee (who, duty map, module), /committee/settings (admin)
     read        ->  /notices, /docs
     set up      ->  /admin/bootstrap (key), /admin/building, /admin/units, /admin/topics
-    every day   ->  /cron/reminders (key): retry queued email, then the due-soon digests, then a heartbeat
+                    (/admin/topics {from_seed: "altai"} brings an existing building's topics up to the seed's
+                    stages, deadlines and vote rules)
+    every day   ->  /cron/reminders (key): retry queued email, settle votes whose time is up, decide cases
+                    whose deadline passed (deemed approved / not agreed), then the due-soon digests (cases,
+                    tasks, minutes), then a heartbeat
                 ->  /cron/check (key): retry queued email, look for trouble, email ONE digest (health.py)
     trouble     ->  /failures (admins: their building; product admin: ?all=1), /failures/resolve
     watching    ->  /status (public): alive, and when the self-check last ran
@@ -23,6 +33,31 @@ WHO IS ALLOWED
     answers INVALID_TOKEN before the function runs. The
     building comes from `b`. Every permission is worked out from our own Memberships
     and Roles rows on every call (people.context), never from anything the page says.
+    Committee business (votes, meetings, minutes, tasks, internal notes) is for committee
+    roles only: residents and the building manager get 403, another building's ids 404.
+
+COMMITTEE ROUTES (2026-11-10; law: docs/compliance/qld-committee-rules.md)
+    GET  /board                     {columns: [{key, label, cards: [case summary + stage, stage_label,
+                                     owner_label, missed_label, missed, urgent, vote]}], closed, module_note}
+    POST /case/action {id, action, note}           -> the case (as GET /case)
+    GET  /case                      handlers also get case.missed {banner, card, date_text, days_left,
+                                     urgent, citation, outcome, extendable} and case.stage {label,
+                                     owner_label, instructions, rule, allowed, buttons, path}; the
+                                     committee also gets votes and tasks
+    GET  /committee                 {members, checks, module, module_note, secretary_contact, duties, positions}
+    POST /committee/settings {duties, module, evidence, secretary_contact, unfinancial}  (admin)
+    GET  /votes                     {votes, can_open, module_note};  GET /vote {id} -> {vote}
+    POST /votes {words, case_id?, exempt?}         -> {vote}
+    POST /vote/ballot {id, vote: yes|no|abstain, conflict, note}  -> {vote}
+    GET  /meetings                  {meetings, can_call};  GET /meeting {id} -> {meeting}
+    POST /meetings {title, starts_at: "YYYY-MM-DDTHH:MM" Brisbane, place, items: [{text, motion?,
+                    case_id?}], short_notice}        -> {meeting}
+    POST /meeting/attendance {id, people: [{user_id, how, proxy_holder?}], others}
+    POST /meeting/motion {id, words, case_id?, exempt?};  POST /meeting/vote {motion_id, votes: {user_id: v}}
+    POST /meeting/close {id};  POST /meeting/minutes {id, text};  POST /meeting/minutes/issue {id}
+    GET  /tasks {scope: mine|all} -> {tasks, people, positions}
+    POST /tasks {title, detail, due_date, assignee_user_id | assignee_position, motion_id?, case_id?,
+                 meeting_id?} -> {task};  POST /task/done {id, done} -> {task}
 
 EVERY ANSWER
     JSON with "ok": true or false. 400 bad input, 401 not signed in, 403 not allowed,
@@ -51,14 +86,19 @@ import admin
 import auth
 import buildings
 import cases
+import committee
 import content
 import deadlines
 import failures
 import health
 import mailer
+import meetings
 import people
+import pipeline
 import store
+import tasks
 import topics
+import votes
 from errors import ApiError, forbidden
 
 logger = logging.getLogger("bodycorp_api")
@@ -146,9 +186,23 @@ def _cron(c):
 def cron_reminders(c):
     _cron(c)
     queue = mailer.retry_queue(c.db, c.now)
-    sent = deadlines.remind(c.db, c.now)
+    votes.settle_all(c.db, c.now)          # a vote whose 21 days are up gets its result first...
+    pipeline.apply_deemed(c.db, c.now)     # ...then any case still undecided past its deadline
+    sent = deadlines.remind(c.db, c.now, lambda b: _due_extras(c.db, b, c.now))
     failures.heartbeat(c.db, failures.HEARTBEAT_REMINDERS, "Reminders ran: {} digest(s) sent.".format(sent))
     return {"sent": sent, "queue": queue}
+
+
+def _due_extras(db, building, now):
+    """Tasks and draft minutes due soon, for the daily digest."""
+    lines = tasks.due_lines(db, building, now)
+    for left, row in meetings.minutes_due(db, building, now):
+        when = "OVERDUE by {} day(s)".format(-left) if left < 0 else "due in {} day(s)".format(left)
+        line = "Minutes: {} ({}) · issue {} (SM s 71)".format(row.get("Title"), meetings.local_text(
+            store.parse_dt(row["Starts_At"])), when)
+        for email in committee.emails_of(db, committee.holders(db, building, committee.resolve(building, "minutes"))):
+            lines.setdefault(email, []).append(line)
+    return lines
 
 
 def cron_check(c):
@@ -223,7 +277,108 @@ def get_cases(c):
 
 
 def get_case(c):
-    return cases.detail(c.db, c.building, c.ctx, c.get("id"), c.now)
+    out = cases.detail(c.db, c.building, c.ctx, c.get("id"), c.now)
+    if c.ctx["cmt"]["committee"] and out["case"]["can_handle"]:
+        votes.settle_building(c.db, c.building, c.now)
+        out = cases.detail(c.db, c.building, c.ctx, c.get("id"), c.now)
+        out["votes"] = votes.case_votes(c.db, c.building, c.ctx, c.get("id"), c.now)
+        out["tasks"] = [t for t in tasks.listing(c.db, c.building, c.ctx, "all", c.now)["tasks"]
+                        if t["case_id"] == out["case"]["id"]]
+        out["can_open_vote"] = committee.may_act(c.db, c.building, c.ctx, "vocm")
+    return out
+
+
+def case_action(c):
+    def open_vote(row, words):
+        votes.open_vocm(c.db, c.building, c.ctx, words, row["ROWID"], "", c.now)
+    pipeline.action(c.db, c.building, c.ctx, c.get("id"), c.get("action"), c.get("note"), c.now, open_vote)
+    return get_case(c)
+
+
+# ---------- the committee ----------
+
+def get_board(c):
+    votes.settle_building(c.db, c.building, c.now)
+    return pipeline.board(c.db, c.building, c.ctx, c.now, votes.open_by_case(c.db, c.building, c.now)
+                          if c.ctx["cmt"]["committee"] else {})
+
+
+def get_committee(c):
+    return committee.overview(c.db, c.building, c.ctx)
+
+
+def post_committee_settings(c):
+    return committee.save_settings(c.db, c.building, c.ctx, c.get("duties"), c.get("module"), c.get("evidence"),
+                                   c.get("secretary_contact"), c.get("unfinancial"))
+
+
+def get_votes(c):
+    return votes.listing(c.db, c.building, c.ctx, c.now)
+
+
+def get_vote(c):
+    return votes.detail(c.db, c.building, c.ctx, c.get("id"), c.now)
+
+
+def post_vote(c):
+    motion = votes.open_vocm(c.db, c.building, c.ctx, c.get("words"), c.get("case_id"), c.get("exempt") or "", c.now)
+    return votes.detail(c.db, c.building, c.ctx, motion["ROWID"], c.now)
+
+
+def post_ballot(c):
+    return votes.ballot(c.db, c.building, c.ctx, c.get("id"), c.get("vote"), c.get("conflict"), c.get("note"), c.now)
+
+
+def get_meetings(c):
+    return meetings.listing(c.db, c.building, c.ctx, c.now)
+
+
+def get_meeting(c):
+    return meetings.detail(c.db, c.building, c.ctx, c.get("id"), c.now)
+
+
+def post_meeting(c):
+    return meetings.create(c.db, c.building, c.ctx, c.get("title"), c.get("starts_at"), c.get("place"),
+                           c.get("items"), c.get("short_notice"), c.now)
+
+
+def meeting_attendance(c):
+    return meetings.record_attendance(c.db, c.building, c.ctx, c.get("id"), c.get("people"), c.get("others"), c.now)
+
+
+def meeting_motion(c):
+    return meetings.add_motion(c.db, c.building, c.ctx, c.get("id"), c.get("words"), c.get("case_id"),
+                               c.get("exempt") or "", c.now)
+
+
+def meeting_vote(c):
+    return meetings.record_votes(c.db, c.building, c.ctx, c.get("motion_id"), c.get("votes"), c.now)
+
+
+def meeting_close(c):
+    return meetings.close(c.db, c.building, c.ctx, c.get("id"), c.now)
+
+
+def meeting_minutes(c):
+    return meetings.save_minutes(c.db, c.building, c.ctx, c.get("id"), c.get("text"), c.now)
+
+
+def meeting_issue(c):
+    return meetings.issue_minutes(c.db, c.building, c.ctx, c.get("id"), c.now)
+
+
+def get_tasks(c):
+    return tasks.listing(c.db, c.building, c.ctx, c.get("scope") or "mine", c.now)
+
+
+def post_task(c):
+    return tasks.create(c.db, c.building, c.ctx, c.get("title"), c.get("detail"), c.get("due_date"),
+                        c.get("assignee_user_id"), c.get("assignee_position"), c.get("motion_id"),
+                        c.get("case_id"), c.get("meeting_id"), c.now)
+
+
+def task_done(c):
+    return tasks.set_done(c.db, c.building, c.ctx, c.get("id"), c.get("done"), c.now)
 
 
 def case_step(c):
@@ -311,6 +466,9 @@ def admin_units(c):
 
 
 def admin_topics(c):
+    if c.get("from_seed"):
+        counts = admin.upgrade_topics(c.db, c.ctx, c.building, c.get("from_seed"))
+        return {"topics": topics.all_topics(c.db, c.building), "counts": counts}
     return {"topics": admin.save_topic(c.db, c.ctx, c.building, c.get("key"), c.get("definition"),
                                        c.get("active", True), c.get("sort", 0))}
 
@@ -337,6 +495,26 @@ ROUTES = {
     ("POST", "/case/message"): case_message,
     ("POST", "/case/decide"): case_decide,
     ("GET", "/case/file"): case_file,
+    ("POST", "/case/action"): case_action,
+    ("GET", "/board"): get_board,
+    ("GET", "/committee"): get_committee,
+    ("POST", "/committee/settings"): post_committee_settings,
+    ("GET", "/votes"): get_votes,
+    ("GET", "/vote"): get_vote,
+    ("POST", "/votes"): post_vote,
+    ("POST", "/vote/ballot"): post_ballot,
+    ("GET", "/meetings"): get_meetings,
+    ("GET", "/meeting"): get_meeting,
+    ("POST", "/meetings"): post_meeting,
+    ("POST", "/meeting/attendance"): meeting_attendance,
+    ("POST", "/meeting/motion"): meeting_motion,
+    ("POST", "/meeting/vote"): meeting_vote,
+    ("POST", "/meeting/close"): meeting_close,
+    ("POST", "/meeting/minutes"): meeting_minutes,
+    ("POST", "/meeting/minutes/issue"): meeting_issue,
+    ("GET", "/tasks"): get_tasks,
+    ("POST", "/tasks"): post_task,
+    ("POST", "/task/done"): task_done,
     ("GET", "/notices"): get_notices,
     ("POST", "/notices"): post_notice,
     ("POST", "/notices/delete"): delete_notice,

@@ -32,8 +32,10 @@ BUILDINGS, UNITS, USERS, MEMBERSHIPS, ROLES = "Buildings", "Units", "Users", "Me
 TOPICS, CASES, EVENTS, NOTICES, DOCS = "Topics", "Cases", "Events", "Notices", "Docs"
 LOGIN_CODES, SESSIONS = "Login_Codes", "Sessions"
 FAILURES, MAIL_QUEUE = "Failures", "Mail_Queue"
+MOTIONS, BALLOTS, MEETINGS, TASKS = "Motions", "Ballots", "Meetings", "Tasks"
 
-_TEXT = {"Brand", "Settings", "Definition", "Answers", "Steps", "Decision", "Files", "Body"}
+_TEXT = {"Brand", "Settings", "Definition", "Answers", "Steps", "Decision", "Files", "Body", "Words", "Eligible",
+         "Tally", "Agenda", "Attendance", "Minutes", "Detail"}
 
 SCHEMA = {
     BUILDINGS: {"required": ("Slug",), "unique": ("Slug",),
@@ -47,7 +49,7 @@ SCHEMA = {
     TOPICS: {"required": ("Building_Id", "Topic_Key", "Definition"), "unique": (), "sizes": {"Topic_Key": 60}},
     CASES: {"required": ("Building_Id", "Unit_Id", "User_Id", "Ref", "Topic_Key", "Status", "Handler"),
             "unique": ("Ref",),
-            "sizes": {"Ref": 30, "Topic_Key": 60, "Title": 255, "Status": 30, "Handler": 20}},
+            "sizes": {"Ref": 30, "Topic_Key": 60, "Title": 255, "Status": 30, "Handler": 20, "Stage": 60}},
     EVENTS: {"required": ("Case_Id", "Building_Id", "Kind"), "unique": (), "sizes": {"Kind": 30}},
     NOTICES: {"required": ("Building_Id", "Title", "Audience"), "unique": (),
               "sizes": {"Title": 255, "Audience": 20}},
@@ -62,6 +64,17 @@ SCHEMA = {
     MAIL_QUEUE: {"required": ("To_Email", "Subject", "Html", "Status"), "unique": (),
                  "sizes": {"To_Email": TEXT_MAX, "Bcc": TEXT_MAX, "Subject": 255, "Html": TEXT_MAX,
                            "Status": 20, "Last_Error": 255}},
+    # Committee working view (2026-11-10). "Result" is a reserved word in the Data Store, hence Tally.
+    MOTIONS: {"required": ("Building_Id", "Kind", "Words", "Status"), "unique": (),
+              "sizes": {"Kind": 20, "Words": TEXT_MAX, "Status": 20, "Eligible": TEXT_MAX, "Tally": TEXT_MAX,
+                        "Exempt": 30}},
+    BALLOTS: {"required": ("Motion_Id", "Building_Id", "User_Id", "Vote"), "unique": (),
+              "sizes": {"Vote": 20, "Note": 255}},
+    MEETINGS: {"required": ("Building_Id", "Title", "Starts_At", "Status"), "unique": (),
+               "sizes": {"Title": 255, "Place": 255, "Agenda": TEXT_MAX, "Status": 20, "Short_Notice": 255,
+                         "Attendance": TEXT_MAX, "Minutes": TEXT_MAX, "Minutes_Status": 20}},
+    TASKS: {"required": ("Building_Id", "Title"), "unique": (),
+            "sizes": {"Title": 255, "Detail": TEXT_MAX, "Assignee_Position": 20}},
 }
 
 

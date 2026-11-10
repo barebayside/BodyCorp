@@ -33,6 +33,7 @@ import committee
 import content
 import deadlines
 import mailer
+import push
 import stages
 import store
 import topics
@@ -242,9 +243,13 @@ def _send_notice(db, building, motion, case_row):
         lines.insert(1, "It is about request {} ({}).".format(case_row.get("Ref"), case_row.get("Title")))
     html = mailer.page(building, "A committee vote outside a meeting", lines, "Vote now",
                        link=_vote_link(building, motion))
-    for email in committee.emails_of(db, committee.committee_ids(db, building)):
+    members = committee.committee_ids(db, building)
+    for email in committee.emails_of(db, members):
         mailer.send(db, email, "{}: committee vote — closes {}".format(building["name"], closes), html,
                     building=building)
+    # Their phones too (the owners' advice below is email only). Never raises.
+    push.send(db, building, members, building["name"], "Committee vote: closes {}".format(closes),
+              push.app_link(building, "vote/{}".format(motion["ROWID"])))
     advice = mailer.page(building, "The committee is voting on a motion",
                          ["The committee is voting outside a meeting on this motion:", motion["Words"],
                           "Voting closes at the end of {}. The result will be sent to owners.".format(closes)],

@@ -20,6 +20,9 @@ BodyCorp API: one function behind the portal page.
                 ->  /cron/check (key): retry queued email, look for trouble, email ONE digest (health.py)
     trouble     ->  /failures (admins: their building; product admin: ?all=1), /failures/resolve
     watching    ->  /status (public): alive, and when the self-check last ran
+    phone       ->  /push/key (public): the VAPID key, "" when notifications aren't set up
+                ->  POST /push/subscribe {b, subscription} (people of the building) ->  the device is told
+                    beside the emails (push.py); DELETE /push/subscribe {b, endpoint} at sign-out
 
 WHEN THINGS GO WRONG
     Every email goes through mailer.send: a failed one is queued and retried, and
@@ -74,6 +77,9 @@ ENVIRONMENT (catalyst-config.json)
     PORTAL_URL      the portal page, for links in emails
     SUPPORT_EMAIL   the product's support address: gets the daily check's digest, and
                     (if also an admin somewhere) sees every building's failures
+    VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
+                    phone notifications (push.py). The same keys on the test copy and the live
+                    site: new keys silently cut off every phone that turned notifications on.
 """
 
 import json
@@ -95,6 +101,7 @@ import mailer
 import meetings
 import people
 import pipeline
+import push
 import store
 import tasks
 import topics
@@ -454,6 +461,24 @@ def resolve_failure(c):
     return {"failure": failures.resolve(c.db, c.user, c.building, c.get("id"))}
 
 
+# ---------- phone notifications ----------
+
+def get_push_key(c):
+    c.building                                   # an unknown building is a 404, as everywhere else
+    return {"key": push.public_key()}
+
+
+def push_subscribe(c):
+    """Only people of this building (an approved unit, or any role in it) may have its notifications."""
+    if not (c.ctx["unit_ids"] or c.ctx["roles"]):
+        raise forbidden("Notifications are for people of this building.")
+    return push.subscribe(c.db, c.building, c.user, c.body, c.headers.get("user-agent", ""))
+
+
+def push_unsubscribe(c):
+    return push.unsubscribe(c.db, c.building, c.user, c.body)
+
+
 # ---------- admin ----------
 
 def admin_building(c):
@@ -531,6 +556,9 @@ ROUTES = {
     ("GET", "/status"): get_status,
     ("GET", "/failures"): get_failures,
     ("POST", "/failures/resolve"): resolve_failure,
+    ("GET", "/push/key"): get_push_key,
+    ("POST", "/push/subscribe"): push_subscribe,
+    ("DELETE", "/push/subscribe"): push_unsubscribe,
 }
 
 

@@ -11,6 +11,7 @@ KINDS
     mail_too_long       an email bigger than a queued copy can hold (Html is text(10000))
     mail_gave_up        a queued email still failed after 5 tries
     error               an unexpected crash in a request (route + error type only)
+    push                a phone notification couldn't be delivered (host + status only)
     heartbeat_*         not a failure: a "this job ran" stamp, written already resolved
 
 `log` never raises. A failure while recording a failure is written to the

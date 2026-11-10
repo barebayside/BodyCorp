@@ -13,6 +13,7 @@ from datetime import datetime, time, timedelta, timezone
 import buildings
 import mailer
 import people
+import push
 import store
 
 BRISBANE = timezone(timedelta(hours=10))
@@ -102,4 +103,9 @@ def remind(db, now_utc, extra=None):
             subject = "{}: {} item(s) due soon or overdue".format(building["name"], len(lines)) if any(
                 line.startswith(("Task:", "Minutes:")) for line in lines) else                 "{}: {} request(s) due soon or overdue".format(building["name"], len(lines))
             sent += 1 if mailer.send(db, email, subject, body, building=building) else 0
+            # A nudge on their phone; the digest is the record. Only tasks: open the task list.
+            tasks_only = all(line.startswith("Task:") for line in lines)
+            push.send_to_emails(db, building, [email], building["name"],
+                                "{} item(s) due soon or overdue".format(len(lines)),
+                                push.app_link(building, "tasks" if tasks_only else "inbox/due"))
     return sent

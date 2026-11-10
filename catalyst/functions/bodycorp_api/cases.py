@@ -21,6 +21,7 @@ import buildings
 import deadlines
 import mailer
 import people
+import push
 import stages
 import store
 import topics
@@ -166,7 +167,7 @@ def create(db, building, user, ctx, unit_id, topic_key, answers, files, now=None
                "{} file(s) couldn't be saved. Ask the resident to send them again.".format(failed), True)
     _email_handlers(db, building, case_row, "New request {}".format(case_row["Ref"]),
                     ["{} for {}.".format(topic["label"], buildings.unit_labels(db, building).get(unit_id, ""))],
-                    topic, now)
+                    topic, now, push_body=_new_request_line(topic, case_row, now))
     out = detail(db, building, ctx, case_row["ROWID"], now)
     if failed:
         out["warning"] = "{} file(s) couldn't be saved. Please send them in a message.".format(failed)
@@ -305,11 +306,34 @@ def _resident_email(db, row):
     return (db.get(store.USERS, row.get("User_Id")) or {}).get("Email") or ""
 
 
-def _email_resident(db, building, row, heading, lines):
+def _email_resident(db, building, row, heading, lines, push_line=None):
+    """The resident's email, and the same news as one line on their phone (if they turned notifications on)."""
     subject = "{}: {} {}".format(building["name"], row.get("Ref"), heading)
     mailer.send(db, _resident_email(db, row), subject,
                 mailer.page(building, heading, lines, "See your request", link=case_link(building, row, False)),
                 building=building)
+    push_resident(db, building, row, "{}: {}".format(row.get("Ref"), push_line or heading))
+
+
+def push_resident(db, building, row, body):
+    """'ALT-0042: Decision made' to the person who lodged it, opening their request. Never raises."""
+    push.send(db, building, [row.get("User_Id")], building["name"], body,
+              push.app_link(building, "request/{}".format(row["ROWID"])))
+
+
+def push_handlers(db, building, row, emails, body):
+    """One line to the phones of whoever was just emailed about the case, opening it. Never raises."""
+    push.send_to_emails(db, building, emails, building["name"], body,
+                        push.app_link(building, "case/{}".format(row["ROWID"])))
+
+
+def _new_request_line(topic, row, now):
+    """'New request ALT-0042: Keep a pet', led by the deadline when it is a week or less away."""
+    line = "New request {}: {}".format(row.get("Ref"), row.get("Title") or "")
+    info = stages.missed(topic, row, now or store.utc_now())
+    if info and 0 <= info["days_left"] <= deadlines.SOON_DAYS:
+        line = "Decide by {}: {}".format(stages.short_date(store.parse_dt(row.get("Due_At"))), line)
+    return line
 
 
 def case_link(building, row, staff=True):
@@ -317,14 +341,19 @@ def case_link(building, row, staff=True):
     return "{}#/{}/{}".format(base, "case" if staff else "request", row["ROWID"]) if base else ""
 
 
-def _email_handlers(db, building, row, heading, lines, topic=None, now=None):
-    """To whoever handles the case. The first line is always what happens if nobody decides in time."""
+def _email_handlers(db, building, row, heading, lines, topic=None, now=None, push_body=None):
+    """
+    To whoever handles the case. The first line is always what happens if nobody decides in time.
+    Their phones get `push_body` (or the heading) right after the emails.
+    """
     topic = topic or topics.get(db, building, row.get("Topic_Key")) or {}
     first = stages.missed_line(topic, row, now or store.utc_now())
     body = mailer.page(building, heading, ([first] if first else []) + list(lines), "Open the request",
                        link=case_link(building, row))
-    for email in deadlines.handler_emails(db, building, row.get("Handler")):
+    emails = deadlines.handler_emails(db, building, row.get("Handler"))
+    for email in emails:
         mailer.send(db, email, "{}: {}".format(building["name"], heading), body, building=building)
+    push_handlers(db, building, row, emails, push_body or heading)
 
 
 def set_step(db, building, ctx, case_id, index, done, now=None):
@@ -355,7 +384,8 @@ def set_status(db, building, ctx, case_id, status, note, now=None):
     label = STATUS_LABELS[status]
     _event(db, building, row["ROWID"], ctx["user_id"], "status", "Status: {}{}".format(
         label, "\n" + note if note else ""))
-    _email_resident(db, building, row, "is now: {}".format(label), [note])
+    _email_resident(db, building, row, "is now: {}".format(label), [note],
+                    "Now {}".format(label[:1].lower() + label[1:]))
     return detail(db, building, ctx, row["ROWID"], now)
 
 
@@ -371,10 +401,11 @@ def message(db, building, ctx, case_id, body, to_resident, now=None):
         to_resident = to_resident in (True, "true", 1, "1")
         event = _event(db, building, row["ROWID"], ctx["user_id"], "message", body, not to_resident)
         if to_resident:
-            _email_resident(db, building, row, "has a new message", [body])
+            _email_resident(db, building, row, "has a new message", [body], "New message")
     else:
         event = _event(db, building, row["ROWID"], ctx["user_id"], "reply", body, False)
-        _email_handlers(db, building, row, "Reply on {}".format(row.get("Ref")), [body])
+        _email_handlers(db, building, row, "Reply on {}".format(row.get("Ref")), [body],
+                        push_body="{}: the resident replied".format(row.get("Ref")))
     who = ctx["user"].get("name") or ctx["user"].get("email")
     return {"id": str(event["ROWID"]), "kind": event.get("Kind"), "body": body,
             "internal": event.get("Internal") is True, "at": store.created_iso(event), "author": who,
@@ -420,5 +451,5 @@ def apply_decision(db, building, row, outcome, reasons, conditions, by, now, ext
     db.update(store.CASES, change)
     lines = decision_lines(decision)
     _event(db, building, row["ROWID"], by, "decision", "\n".join(lines))
-    _email_resident(db, building, row, "has been decided", lines)
+    _email_resident(db, building, row, "has been decided", lines, "Decision made")
     return decision

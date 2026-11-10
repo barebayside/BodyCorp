@@ -1,0 +1,22 @@
+{
+  "id": "portal.html?b=altai",
+  "name": "Alatai on the Park",
+  "short_name": "Alatai",
+  "description": "Requests, approvals, notices and documents for Alatai on the Park residents.",
+  "lang": "en-AU",
+  "dir": "ltr",
+  "start_url": "portal.html?b=altai&source=home-screen",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#243B2F",
+  "background_color": "#F9F7EF",
+  "categories": ["lifestyle", "productivity"],
+  "icons": [
+    { "src": "icons/altai-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/altai-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/altai-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/altai-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icons/altai-badge-96.png", "sizes": "96x96", "type": "image/png", "purpose": "monochrome" }
+  ]
+}

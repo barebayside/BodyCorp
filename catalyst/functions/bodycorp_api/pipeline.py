@@ -130,9 +130,15 @@ def send_button_email(db, building, row, topic, email, note, sender, now, decisi
     html = mailer.page(building, subject, ([first] if first else []) + lines,
                        "See your request" if to == "resident" else "Open the request", link=values["link"])
     sent = 0
-    for address in recipients(db, building, row, to):
+    addresses = recipients(db, building, row, to)
+    for address in addresses:
         sent += 1 if mailer.send(db, address, "{}: {}".format(building["name"], subject), html,
                                  building=building) else 0
+    # The same people's phones, one line each (the subject already starts with the ref). Never raises.
+    if to == "resident":
+        cases.push_resident(db, building, row, subject)
+    else:
+        cases.push_handlers(db, building, row, addresses, subject)
     # The copy kept on the request leaves out the link: the reader is already looking at it.
     record = re.sub(r"\n{3,}", "\n\n", stages.render(email.get("body") or "", dict(values, link=""))).strip()
     return record, sent

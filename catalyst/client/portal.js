@@ -304,6 +304,14 @@ function applyBrand(building) {
   }
   if (isColour(brand.accent)) root.setProperty("--accent", brand.accent.trim());
 
+  // The home-screen app: this building's app card, icons and short name (portal.html serves every building).
+  const setHref = (id, value) => { const el = document.getElementById(id); if (el && value) el.setAttribute("href", value); };
+  if (brand.app_manifest) setHref("app-manifest", brand.app_manifest);
+  setHref("app-touch-icon", brand.apple_touch);
+  setHref("app-favicon", brand.app_icon && brand.app_icon.replace(/-192\.png$/, "-32.png"));
+  const title = document.getElementById("app-title");
+  if (title && building && building.name) title.setAttribute("content", appName());
+
   const name = building.name || "Building portal";
   $("#bname").textContent = name;
   document.title = building.name ? building.name : "Building portal";
@@ -442,6 +450,12 @@ function signOutHere(note) {
 }
 
 async function signOut() {
+  try {
+    const reg = canPush() && await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    // Keep the browser's subscription: the next person to sign in on this phone re-sends it as theirs.
+    if (sub) await api(withB("/push/subscribe", { endpoint: sub.endpoint }), { method: "DELETE", body: { b: state.b, endpoint: sub.endpoint } });
+  } catch (e) { /* signing out anyway */ }
   try { await api("/auth/logout", { body: {} }); } catch (e) { /* signed out here either way */ }
   signOutHere("You're signed out.");
 }
@@ -514,6 +528,7 @@ async function route(retry) {
   if (!state.me) {
     drawLoading();
     try { await loadMe(); } catch (e) { if (!(e instanceof Quiet) && t === seq) drawError(e.message); return; }
+    refreshSubscription();
     if (t !== seq) return;
   }
   const redirect = gate(found, hash);
@@ -796,7 +811,9 @@ async function viewHome(t) {
     ${me.can.submit || units.length ? '<section class="card"><h2>My requests</h2><div id="mine"><p class="muted">Loading…</p></div></section>' : ""}
     ${canRead ? '<section class="card"><h2>Documents</h2><div id="docs"><p class="muted">Loading…</p></div></section>' : ""}
     ${!canRead && me.can.approve ? '<section class="card"><h2>Your jobs</h2><div class="actions"><a class="btn" href="#/approvals">Approvals</a><a class="btn secondary" href="#/members">Members</a></div></section>' : ""}
+    <div id="app-row" class="app-row" hidden></div>
     <p class="link-row small"><a href="#/claim">Add another unit</a></p>`);
+  showAppRow();
 
   const jobs = [];
   if (canRead) {
@@ -1386,7 +1403,9 @@ async function viewBoard(t) {
         <h2 class="bcol-head"><span>${esc(col.label)}</span><span class="count">${esc(col.cards.length)}</span></h2>
         ${col.cards.length ? `<div class="bcards">${col.cards.map(boardCardHtml).join("")}</div>` : '<p class="muted small pad">Nothing here.</p>'}
       </section>`).join("")}
-    </div>`);
+    </div>
+    <div id="app-row" class="app-row" hidden></div>`);
+  showAppRow();
 }
 
 // ------------------------------------------------------------------ one case: the next step
@@ -2333,6 +2352,148 @@ async function viewSettings(t) {
       route();
     });
   });
+}
+
+// ------------------------------------------------------------------ home-screen app and phone notifications
+// One quiet row on the home screen: "Add to Home Screen" first, then "Turn on" notifications.
+// Notification.requestPermission() is ONLY ever called from the "Turn on" tap (iPhone refuses it
+// otherwise, and Chrome hides the prompt for pages that ask unasked). Email always goes out anyway.
+
+const INSTALL_DISMISSED = "bodycorp_install_dismissed";
+const DISMISS_DAYS = 30;
+const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIPhone = () => /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);   // iPadOS says "Mac"
+const isAndroid = () => /android/i.test(navigator.userAgent);
+const canPush = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+// Safari (and Chrome/Edge on iOS 16.4+) have Share -> Add to Home Screen; the browsers inside Gmail,
+// Facebook, Instagram... don't. Those mostly drop the "Safari/" token or add their own name.
+const iosCanAdd = () => /Safari\//.test(navigator.userAgent) &&
+  !/FBAN|FBAV|FB_IAB|Instagram|GSA\/|Line\/|LinkedInApp|Twitter|Snapchat|MicroMessenger|FxiOS|OPiOS/i.test(navigator.userAgent);
+
+let installPrompt = null;   // Android/Chrome hands this over once; we show our own quiet line instead of its bar
+let pushKey = null;         // null = not asked yet, "" = notifications not set up on this copy
+let pushJustOn = false;
+window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); installPrompt = event; drawAppRow(); });
+window.addEventListener("appinstalled", () => { installPrompt = null; drawAppRow(); });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js", { scope: "./" }).catch(() => { /* app still works without it */ });
+  });
+  // A tapped notification when the open window isn't controlled by the worker: go where it says.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data && event.data.type === "open" && event.data.url) location.href = event.data.url;
+  });
+}
+
+function appName() {
+  const brand = brandOf(state.building);
+  const name = (state.building && state.building.name) || "the portal";
+  return (typeof brand.app_short_name === "string" && brand.app_short_name.trim()) || name.replace(/ on the Park$/, "");
+}
+
+function urlKey(base64url) {
+  const pad = "=".repeat((4 - (base64url.length % 4)) % 4);
+  const raw = atob((base64url + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+async function sendSubscription(sub) {
+  await api(withB("/push/subscribe"), { body: { b: state.b, subscription: sub.toJSON() } });
+}
+
+async function turnOnNotifications() {          // ONLY ever called from a tap
+  const { key } = await api(withB("/push/key"));
+  if (!key) throw new Error("Notifications aren't set up yet.");
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") { drawAppRow(); return; }
+  let sub;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    sub = (await reg.pushManager.getSubscription()) ||
+          (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlKey(key) }));
+  } catch (e) {
+    // The browser's own words ("Registration failed - …") mean nothing to a resident.
+    throw new Error("This phone couldn't turn notifications on just now. You'll still get every email.");
+  }
+  await sendSubscription(sub);
+  pushJustOn = true;
+  drawAppRow();
+}
+
+// On every signed-in start: if notifications are on, re-send the subscription so the server stays current
+// (phones change it now and then; the server also moves a shared phone to whoever signed in last).
+async function refreshSubscription() {
+  if (!canPush() || Notification.permission !== "granted") return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await sendSubscription(sub);
+  } catch (e) { /* email still reaches them */ }
+}
+
+function installDismissed() {
+  const at = Number(local.get(INSTALL_DISMISSED) || 0);
+  return at > 0 && Date.now() - at < DISMISS_DAYS * 24 * 60 * 60 * 1000;
+}
+
+// [label, sentence (html), [[action, link text]...]] for the row, or null for no row.
+function appRowParts() {
+  const name = esc(appName());
+  const installed = isStandalone();
+  if (!installed && !installDismissed()) {
+    if (installPrompt && isAndroid()) {     // desktop Chrome offers it too: phones only
+      return ["On your phone", `Add ${name} to your Home Screen.`, [["add", "Add"], ["later", "Not now"]]];
+    }
+    if (isIPhone()) {
+      if (iosCanAdd()) {
+        return ["On your phone", `Add ${name} to your Home Screen: tap <b>Share</b> (the square with the arrow), then <b>Add to Home Screen</b>, then <b>Add</b>. Then open it from there.`, [["later", "Done"]]];
+      }
+      return ["On your phone", "Open this page in Safari to add it to your Home Screen.", []];
+    }
+  }
+  // Notifications: once it's on the Home Screen, or straight away on Android. A Safari tab on iPhone has no PushManager.
+  if (!(installed || isAndroid()) || !canPush() || !pushKey) return null;
+  const permission = Notification.permission;
+  if (permission === "default") return ["Notifications", "Get a message on this phone when something needs you.", [["push", "Turn on"]]];
+  if (permission === "denied") {
+    return ["Notifications", isIPhone() ? `Turned off for this app. To turn them on: Settings → Notifications → ${name}.`
+      : "Turned off for this app. To turn them on: hold the app icon → App info → Notifications.", []];
+  }
+  return pushJustOn ? ["Notifications", "Notifications are on for this phone.", []] : null;
+}
+
+function drawAppRow() {
+  const el = $("#app-row");
+  if (!el) return;
+  const parts = appRowParts();
+  el.hidden = !parts;
+  if (!parts) { el.textContent = ""; return; }
+  const [label, text, links] = parts;
+  el.innerHTML = `<p class="label">${esc(label)}</p>
+    <p class="app-row-text">${text}</p>
+    ${links.length ? `<p class="app-row-links">${links.map(([k, t]) => `<button type="button" class="linkbtn" data-app="${k}">${esc(t)}</button>`).join("")}</p>` : ""}
+    <p class="error"></p>`;
+  const err = $(".error", el);
+  $$("[data-app]", el).forEach((btn) => btn.addEventListener("click", () => {
+    const what = btn.dataset.app;
+    if (what === "later") { local.set(INSTALL_DISMISSED, String(Date.now())); drawAppRow(); return; }
+    if (what === "add" && installPrompt) {
+      const prompt = installPrompt;
+      busy(btn, err, async () => { prompt.prompt(); await prompt.userChoice; installPrompt = null; drawAppRow(); });
+      return;
+    }
+    if (what === "push") busy(btn, err, turnOnNotifications);
+  }));
+}
+
+// Draw the row now, then again once we know whether this copy has notifications set up.
+function showAppRow() {
+  drawAppRow();
+  if (pushKey === null && canPush() && (isStandalone() || isAndroid())) {
+    api(withB("/push/key")).then((r) => { pushKey = r.key || ""; }, () => { pushKey = ""; }).then(drawAppRow);
+  }
 }
 
 // ------------------------------------------------------------------ start

@@ -25,6 +25,11 @@ from errors import ApiError, bad, forbidden
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+# The home-screen app's card and icons: files deployed beside portal.html, never an outside address.
+APP_FILES = {"app_manifest": re.compile(r"^manifest-[a-z0-9-]+\.(webmanifest|json)$"),  # Catalyst serves .webmanifest as octet-stream
+             "app_icon": re.compile(r"^icons/[a-z0-9-]+\.png$"),
+             "app_badge": re.compile(r"^icons/[a-z0-9-]+\.png$"),
+             "apple_touch": re.compile(r"^icons/[a-z0-9-]+\.png$")}
 MAX_UNITS = 500
 
 
@@ -118,6 +123,15 @@ def _clean_brand(brand, current):
             out[key] = url
     if "footer" in brand:
         out["footer"] = str(brand["footer"] or "").strip()[:120]
+    for key, pattern in APP_FILES.items():
+        if key in brand:
+            value = str(brand[key] or "").strip()
+            if value and not pattern.match(value):
+                raise bad("{} must name a file of the portal, like {}.".format(
+                    key, "manifest-altai.webmanifest" if key == "app_manifest" else "icons/altai-192.png"))
+            out[key] = value
+    if "app_short_name" in brand:                # the name under the Home Screen icon, e.g. "Alatai"
+        out["app_short_name"] = " ".join(str(brand["app_short_name"] or "").split())[:30]
     return out
 
 

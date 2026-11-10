@@ -173,6 +173,11 @@ def _keys(row):
     return keys if isinstance(keys, dict) and keys.get("p256dh") and keys.get("auth") else None
 
 
+def app_link(building, where):
+    """A link that opens inside the installed app: relative to /app/, e.g. 'portal.html?b=altai#/case/5'."""
+    return "portal.html?b={}#/{}".format((building or {}).get("slug") or "", str(where or "home").lstrip("#/"))
+
+
 def message(building, title, body, url):
     """The JSON the service worker shows. Short: the lock screen cuts the rest off anyway."""
     brand = (building or {}).get("brand") or {}

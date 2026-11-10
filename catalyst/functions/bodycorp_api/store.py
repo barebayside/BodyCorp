@@ -33,9 +33,10 @@ TOPICS, CASES, EVENTS, NOTICES, DOCS = "Topics", "Cases", "Events", "Notices", "
 LOGIN_CODES, SESSIONS = "Login_Codes", "Sessions"
 FAILURES, MAIL_QUEUE = "Failures", "Mail_Queue"
 MOTIONS, BALLOTS, MEETINGS, TASKS = "Motions", "Ballots", "Meetings", "Tasks"
+PUSH_SUBS = "Push_Subs"
 
 _TEXT = {"Brand", "Settings", "Definition", "Answers", "Steps", "Decision", "Files", "Body", "Words", "Eligible",
-         "Tally", "Agenda", "Attendance", "Minutes", "Detail"}
+         "Tally", "Agenda", "Attendance", "Minutes", "Detail", "Endpoint", "Sub_Keys"}
 
 SCHEMA = {
     BUILDINGS: {"required": ("Slug",), "unique": ("Slug",),
@@ -75,6 +76,9 @@ SCHEMA = {
                          "Attendance": TEXT_MAX, "Minutes": TEXT_MAX, "Minutes_Status": 20}},
     TASKS: {"required": ("Building_Id", "Title"), "unique": (),
             "sizes": {"Title": 255, "Detail": TEXT_MAX, "Assignee_Position": 20}},
+    # Web Push devices (2026-11-10). "Keys" is a reserved word in the Data Store, hence Sub_Keys.
+    PUSH_SUBS: {"required": ("User_Id", "Building_Id", "Endpoint", "Sub_Keys"), "unique": (),
+                "sizes": {"Endpoint": TEXT_MAX, "Sub_Keys": TEXT_MAX, "User_Agent": 255}},
 }
 
 

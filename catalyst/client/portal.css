@@ -229,6 +229,15 @@ summary { cursor: pointer; color: var(--link); font-weight: 500; }
 }
 .link-row a:hover { border-bottom-color: currentColor; }
 
+/* The home-screen app line ("Add to Home Screen", then "Turn on" notifications): one hairline row,
+   quiet — no pop-up, no pill, not the screen's filled button. */
+.app-row { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 0 18px; max-width: 640px; }
+.app-row .label { margin: 0 0 4px; }
+.app-row-text { margin: 0; color: var(--body2); font-size: 15.5px; line-height: 1.55; max-width: 54ch; }
+.app-row-links { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: 10px 0 0; }
+.app-row .error { margin-top: 8px; }
+.board ~ .app-row { margin-top: 48px; }
+
 /* ---------------------------------------------------------------- forms */
 
 label { display: block; font: 600 14.5px/1.4 var(--sans); color: var(--ink); margin: 22px 0 8px; }

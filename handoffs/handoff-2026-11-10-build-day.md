@@ -70,3 +70,19 @@ disable test crons, verify the domain + SSL, deploy the new landing page to live
   inbox across buildings. Open: per-job email link vs the manager's own sign-in. (Parked until the onboarding call.)
 - **Onboarding call with Michael before any Alatai-specific build** (Edward): how Alatai actually runs (manager or
   not, who does what) and what they want. The manager hand-over idea above stays PARKED until that call.
+
+## State at sign-off (end of 2026-11-10)
+- **Nothing is urgent overnight.** The live version is up and safe; nothing sends to real residents.
+- **Daily jobs:** the two crons on the TEST copy now point at the LIVE address, so tomorrow's 06:30 self-check and
+  07:00 reminders run against live (expect a "BodyCorp check" digest email — normal). The "Daily jobs to live"
+  Job Scheduling deployment was left at diff generation and NOT started. Either finish it (Console → Settings →
+  Environments → Deployments) and then DISABLE the two test-copy crons, or leave the test-copy crons as the live ones.
+  Never both, or reminders send twice.
+- **Domain:** `bodycorp.barebaysidelabs.com` — Verify + Request SSL still to press (Production → Cloud Scale → Domain Mappings).
+- **Live is behind the test copy:** the new landing page and the rules loop are on the test copy only.
+- **Tomorrow, in order:** (1) onboarding call with Michael (agenda: `buildings/alatai/record.md` Questions);
+  (2) domain Verify + SSL; (3) daily jobs (above); (4) deploy client + function to live WITHOUT overwriting live env
+  vars (untick Settings; check `/admin/bootstrap` still answers "Wrong admin key" to a bad key afterwards);
+  (5) go-live check incl. real iPhone + Android; (6) then build per the call: manager hand-over (parked), five features.
+- **Decisions owed by Edward:** AI privacy OK; product name; pricing (~A$129/mo suggested for 48 lots); lawyer for the
+  legal packs (name + email); landing tile style (site tweaker options).

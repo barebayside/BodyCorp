@@ -13,6 +13,11 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
    Catalyst console; DNS lines go in VentraIP (barebaysidelabs.com). Email sends from a barebaysidelabs.com address
    with the domain verified in Catalyst Mail (SPF include ADDED to the existing Zoho Mail SPF line, never a second
    SPF record; plus the DKIM record). A product domain comes later, once the product is named.
+0b. **Decided 2026-11-10 (Edward): home-screen app, NO App Store / Google Play** ("too much compliance").
+   Build after the committee pipeline: per-building web app manifest (name, icon, colours), a service worker,
+   phone notifications by Web Push (VAPID keys as env vars; a subscriptions table; iPhone needs iOS 16.4+ and the
+   app added to the Home Screen first), an "Add to Home Screen" prompt with iPhone/Android steps, email stays as
+   the fallback. Prove it on a real iPhone and a real Android in the go-live check.
 1. **Edward: verify the email sender.** Catalyst console (signed in as edward@barebaysidelabs.com) → BodyCorp →
    Cloud Scale → Mail → Email configuration → `edward@barebaysidelabs.com` → Verify (code is in your inbox, from
    noreply@notifications.zohocatalyst.com.au). Until then no email goes out, so nobody can sign in by code.

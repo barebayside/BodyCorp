@@ -13,6 +13,13 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
    Catalyst console; DNS lines go in VentraIP (barebaysidelabs.com). Email sends from a barebaysidelabs.com address
    with the domain verified in Catalyst Mail (SPF include ADDED to the existing Zoho Mail SPF line, never a second
    SPF record; plus the DKIM record). A product domain comes later, once the product is named.
+0c. **Approved 2026-11-10 (Edward: "do those five"), build after the pipeline, home-screen app and AI helper:**
+   (1) compliance calendar (the legal year as dated tasks), (2) past-decisions library + reusable standard conditions,
+   (3) plain-words requests (AI picks the form, pre-fills, drafts the handler's reply; a person signs off),
+   (4) contractors + quotes checked against the legal spending limits, insurance/licence expiry,
+   (5) roll + change of tenancy (roll updated within 14 days; leavers lose access). Spec:
+   `docs/superpowers/specs/2026-11-10-five-features-design.md`. Later: lift/amenity bookings, general-meeting voting
+   with proxies, incident/insurance register, levies via StrataMax.
 0b. **Decided 2026-11-10 (Edward): home-screen app, NO App Store / Google Play** ("too much compliance").
    Build after the committee pipeline: per-building web app manifest (name, icon, colours), a service worker,
    phone notifications by Web Push (VAPID keys as env vars; a subscriptions table; iPhone needs iOS 16.4+ and the

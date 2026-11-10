@@ -1,0 +1,125 @@
+{
+  "_note": "Altai on the Park. Units 1-10 are PLACEHOLDERS: replace them with the roll (POST /admin/units). Every topic is DRAFT until checked against Altai's CMS and by-laws.",
+  "building": {
+    "slug": "altai",
+    "name": "Altai on the Park",
+    "scheme_no": "",
+    "brand": {"primary": "#1f4d3a", "accent": "#c9a227", "logo_url": "", "footer": "Altai on the Park"},
+    "settings": {"ref_prefix": "ALT", "state": "QLD", "timezone": "Australia/Brisbane", "units_are_placeholders": true}
+  },
+  "units": [
+    {"unit_no": "1", "lot_no": ""}, {"unit_no": "2", "lot_no": ""}, {"unit_no": "3", "lot_no": ""},
+    {"unit_no": "4", "lot_no": ""}, {"unit_no": "5", "lot_no": ""}, {"unit_no": "6", "lot_no": ""},
+    {"unit_no": "7", "lot_no": ""}, {"unit_no": "8", "lot_no": ""}, {"unit_no": "9", "lot_no": ""},
+    {"unit_no": "10", "lot_no": ""}
+  ],
+  "topics": [
+    {"key": "pet", "sort": 10, "definition": {
+      "label": "Keep a pet", "audience": ["owner", "tenant"], "handler": "committee", "draft": true,
+      "intro": "Tell the committee about the animal you want to keep.",
+      "fields": [
+        {"key": "animal", "label": "What animal?", "type": "text", "required": true},
+        {"key": "breed_size", "label": "Breed and size", "type": "text", "required": false},
+        {"key": "how_many", "label": "How many?", "type": "select", "options": ["1", "2", "3 or more"], "required": true},
+        {"key": "where_kept", "label": "Where will it be kept?", "type": "textarea", "required": true},
+        {"key": "registered", "label": "It is registered with the council (dogs/cats)", "type": "checkbox", "required": false},
+        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
+      "deadline": {"days": 21, "if_missed": "May be treated as approved (BCCM Standard Module, animals) — DRAFT, to be checked against Altai's by-laws"},
+      "steps": [
+        {"title": "Check the request against the animals by-law", "rule": "By-law (animals) — DRAFT"},
+        {"title": "Ask for anything missing (registration, photos)", "rule": "Committee practice — DRAFT"},
+        {"title": "Decide, with reasons if refused, before the deadline", "rule": "BCCM Standard Module — DRAFT"},
+        {"title": "Tell the resident and record any conditions", "rule": "Committee practice — DRAFT"}]}},
+    {"key": "renovation", "sort": 20, "definition": {
+      "label": "Renovation or alteration", "audience": ["owner"], "handler": "committee", "draft": true,
+      "intro": "Tell the committee what you plan to change in your unit.",
+      "fields": [
+        {"key": "work", "label": "What work?", "type": "textarea", "required": true},
+        {"key": "affects_common", "label": "Does it touch common property (walls, floors, pipes, balcony)?", "type": "select", "options": ["Yes", "No", "Not sure"], "required": true},
+        {"key": "flooring", "label": "Changing hard flooring?", "type": "checkbox", "required": false},
+        {"key": "tradie", "label": "Licensed tradesperson (name and licence)", "type": "text", "required": false},
+        {"key": "start", "label": "Planned start", "type": "date", "required": false},
+        {"key": "end", "label": "Planned finish", "type": "date", "required": false},
+        {"key": "plans", "label": "Plans or quote", "type": "file", "required": false}],
+      "steps": [
+        {"title": "Check whether it touches common property", "rule": "BCCM Act / CMS — DRAFT"},
+        {"title": "Check the by-laws on alterations, flooring and noise", "rule": "By-laws — DRAFT"},
+        {"title": "Ask for licences, insurance and plans if missing", "rule": "Committee practice — DRAFT"},
+        {"title": "Decide: committee, or a general meeting if required", "rule": "BCCM Standard Module — DRAFT"},
+        {"title": "Tell the owner and record any conditions", "rule": "Committee practice — DRAFT"}]}},
+    {"key": "incident", "sort": 30, "definition": {
+      "label": "Report an accident or incident", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
+      "intro": "Tell the building manager what happened. In an emergency call 000 first.",
+      "fields": [
+        {"key": "when", "label": "When did it happen?", "type": "date", "required": true},
+        {"key": "where", "label": "Where?", "type": "text", "required": true},
+        {"key": "what", "label": "What happened?", "type": "textarea", "required": true},
+        {"key": "injured", "label": "Was anyone hurt?", "type": "select", "options": ["No", "Yes", "Not sure"], "required": true},
+        {"key": "damage", "label": "Was anything damaged?", "type": "textarea", "required": false},
+        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
+      "steps": [
+        {"title": "Make the area safe", "rule": "Work health and safety — DRAFT"},
+        {"title": "Record the details and photos", "rule": "Building manager practice — DRAFT"},
+        {"title": "Tell the committee and, if needed, the insurer", "rule": "Insurance — DRAFT"},
+        {"title": "Arrange any repair", "rule": "Building manager agreement — DRAFT"}]}},
+    {"key": "maintenance", "sort": 40, "definition": {
+      "label": "Maintenance or repair", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
+      "intro": "Tell the building manager what needs fixing on common property.",
+      "fields": [
+        {"key": "where", "label": "Where is it?", "type": "text", "required": true},
+        {"key": "problem", "label": "What's wrong?", "type": "textarea", "required": true},
+        {"key": "urgent", "label": "Is it urgent (water, power, security)?", "type": "select", "options": ["No", "Yes"], "required": true},
+        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
+      "steps": [
+        {"title": "Check whether it is common property or the lot owner's", "rule": "BCCM Standard Module — DRAFT"},
+        {"title": "Arrange the repair or a quote", "rule": "Building manager agreement — DRAFT"},
+        {"title": "Tell the resident when it is fixed", "rule": "Building manager practice — DRAFT"}]}},
+    {"key": "bylaw", "sort": 50, "definition": {
+      "label": "By-law concern or complaint", "audience": ["owner", "tenant"], "handler": "committee", "draft": true,
+      "intro": "Tell the committee about a by-law problem (noise, parking, rubbish, pets...).",
+      "fields": [
+        {"key": "kind", "label": "What kind of problem?", "type": "select", "options": ["Noise", "Parking", "Rubbish", "Pets", "Smoking", "Other"], "required": true},
+        {"key": "where_who", "label": "Where, and which unit if you know", "type": "text", "required": false},
+        {"key": "what", "label": "What happened, and when?", "type": "textarea", "required": true},
+        {"key": "before", "label": "Has it happened before?", "type": "checkbox", "required": false},
+        {"key": "photo", "label": "Photo", "type": "file", "required": false}],
+      "steps": [
+        {"title": "Check which by-law applies", "rule": "By-laws — DRAFT"},
+        {"title": "Talk to the person or send a friendly letter", "rule": "Committee practice — DRAFT"},
+        {"title": "If it continues, consider a contravention notice", "rule": "BCCM Act (contravention notices) — DRAFT"},
+        {"title": "Tell the resident what was done", "rule": "Committee practice — DRAFT"}]}},
+    {"key": "moving", "sort": 60, "definition": {
+      "label": "Moving in or out / lift booking", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
+      "intro": "Book the lift and loading area for a move or a big delivery.",
+      "fields": [
+        {"key": "kind", "label": "What is it?", "type": "select", "options": ["Moving in", "Moving out", "Big delivery"], "required": true},
+        {"key": "date", "label": "Date", "type": "date", "required": true},
+        {"key": "time", "label": "Time (from - to)", "type": "text", "required": true},
+        {"key": "removalist", "label": "Removalist or company", "type": "text", "required": false}],
+      "steps": [
+        {"title": "Check the lift and loading area are free", "rule": "Building manager practice — DRAFT"},
+        {"title": "Confirm the booking and lift padding", "rule": "By-laws (moving) — DRAFT"},
+        {"title": "Check for damage afterwards", "rule": "Building manager practice — DRAFT"}]}},
+    {"key": "records", "sort": 70, "definition": {
+      "label": "Ask for body corporate records", "audience": ["owner"], "handler": "committee", "draft": true,
+      "intro": "Ask to see or get copies of body corporate records (minutes, roll, accounts...).",
+      "fields": [
+        {"key": "which", "label": "Which records?", "type": "textarea", "required": true},
+        {"key": "how", "label": "How would you like them?", "type": "select", "options": ["Email copies", "Inspect in person"], "required": true}],
+      "deadline": {"days": 7, "if_missed": "Records should be made available within 7 days of the request (BCCM Act, records) — DRAFT, to be checked"},
+      "steps": [
+        {"title": "Check the person may see these records", "rule": "BCCM Act (records) — DRAFT"},
+        {"title": "Work out any fee", "rule": "BCCM Regulation (fees) — DRAFT"},
+        {"title": "Send copies or arrange inspection before the deadline", "rule": "BCCM Act (records) — DRAFT"}]}},
+    {"key": "other", "sort": 80, "definition": {
+      "label": "Something else", "audience": ["owner", "tenant"], "handler": "manager", "draft": true,
+      "intro": "Anything that doesn't fit the other forms.",
+      "fields": [
+        {"key": "subject", "label": "What is it about?", "type": "text", "required": true},
+        {"key": "details", "label": "Details", "type": "textarea", "required": true},
+        {"key": "file", "label": "Photo or document", "type": "file", "required": false}],
+      "steps": [
+        {"title": "Work out who should handle it", "rule": "Building manager practice — DRAFT"},
+        {"title": "Reply to the resident", "rule": "Building manager practice — DRAFT"}]}}
+  ]
+}

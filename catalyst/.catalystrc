@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "694000000418109",
+      "name": "BodyCorp",
+      "domain": {
+        "id": "8006767215",
+        "name": "bodycorp-7006497428.development"
+      },
+      "timezone": "Australia/Brisbane",
+      "env": [
+        {
+          "idx": 1,
+          "id": "7006497428",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}

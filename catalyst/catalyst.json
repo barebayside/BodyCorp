@@ -1,0 +1,12 @@
+{
+  "functions": {
+    "targets": [
+      "bodycorp_api"
+    ],
+    "ignore": [],
+    "source": "functions"
+  },
+  "client": {
+    "source": "client"
+  }
+}

@@ -9,6 +9,9 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
 - **Success looks like:** Michael's committee and building manager run Altai's requests through it, on time and on record.
 
 ## Next
+000. **Onboarding call with Michael (Edward, 2026-11-10)** before any Alatai-specific build: how Alatai actually runs
+   (self-managed or a paid body corporate manager, who does what) and exactly what they want. Questions list:
+   `buildings/alatai/record.md`. The manager hand-over feature is parked until then.
 00. **Live version (Production) created 2026-11-10**: pages + function + tables deployed (`https://bodycorp-7006497428.catalystserverless.com.au`).
    Still to do on live: (a) env vars on the live function (id 694000000424769) — copy from catalyst-config.json, PORTAL_URL
    → the live address; Claude Code auto mode blocks Claude writing production secrets, so Edward approves or pastes them

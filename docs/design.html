@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BodyCorp portal design</title>
+<style>
+  :root{--ink:#1d2424;--muted:#5b6666;--line:#dfe5e3;--bg:#f7f9f8;--card:#fff;--brand:#1f4d3a;--accent:#c9a227;--warn:#a5481e}
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  header{background:var(--brand);color:#fff;padding:28px 16px}
+  header .wrap,main{max-width:960px;margin:0 auto}
+  header h1{margin:0 0 6px;font-size:28px}
+  header p{margin:0;opacity:.85}
+  main{padding:8px 16px 60px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px 22px;margin:18px 0}
+  section h2{margin:0 0 10px;font-size:20px;color:var(--brand);border-left:4px solid var(--accent);padding-left:10px}
+  h3{font-size:16px;margin:16px 0 6px}
+  ul{padding-left:20px;margin:6px 0}
+  li{margin:3px 0}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  th,td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+  th{background:#eef3f1}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .box{border:1px solid var(--line);border-radius:8px;padding:12px;background:#fbfdfc}
+  .box b{display:block;color:var(--brand);margin-bottom:4px}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .flow span{background:#eef3f1;border:1px solid var(--line);border-radius:6px;padding:6px 10px;font-size:14px}
+  .flow i{color:var(--muted);font-style:normal}
+  .note{background:#fff7e6;border:1px solid #f1d9a6;border-radius:8px;padding:10px 12px;font-size:14px}
+  .mine{color:var(--muted);font-size:13px}
+  .later{color:var(--muted)}
+  @media (max-width:600px){header h1{font-size:23px} section{padding:16px}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>BodyCorp portal: design</h1>
+  <p>10 November 2026 · first building: Altai on the Park, Brisbane · working name until the product is named</p>
+</div></header>
+<main>
+
+<section>
+  <h2>Why we're building it</h2>
+  <ul>
+    <li>At Altai, requests, applications and accident reports come in by email, phone and in the foyer.</li>
+    <li>The right details aren't collected. It's unclear whether the building manager or the committee should act.</li>
+    <li>Nobody is sure what the CMS, by-laws and Queensland law require, so things slip.</li>
+    <li>The research found <b>no Australian system that tracks owner applications</b>, even though Queensland sets legal deadlines (for example 21 days for a pet request).</li>
+    <li>It's also the <b>first run of a kit you can reuse</b> for other businesses. The order: Altai first, then pull out the kit.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Who uses it</h2>
+  <div class="grid">
+    <div class="box"><b>Owners</b>Send requests, see their units' requests, notices, minutes, by-laws and CMS.</div>
+    <div class="box"><b>Tenants</b>Send requests and accident reports, see building notices. No owner records.</div>
+    <div class="box"><b>Building manager</b>Handles the day-to-day: repairs, accidents, move-ins and bookings.</div>
+    <div class="box"><b>Committee</b>Handles decisions: pets, renovations, by-law matters, records requests.</div>
+    <div class="box"><b>Approver</b>Approves new sign-ups against the roll. <span class="mine">Who this is at Altai is still open.</span></div>
+    <div class="box"><b>Admin (you)</b>Sets up each building: branding, units, topics and roles.</div>
+  </div>
+</section>
+
+<section>
+  <h2>How it works</h2>
+  <h3>Signing up</h3>
+  <div class="flow"><span>Name + email</span><i>→</i><span>Code by email (no passwords)</span><i>→</i><span>Claim units, e.g. 405 and 406, as owner or tenant</span><i>→</i><span>Waiting for approval</span><i>→</i><span>Approver checks the roll</span><i>→</i><span>"You're in" email</span></div>
+  <p>One login can cover several units. When a unit is sold or a tenant leaves, one click removes them.</p>
+
+  <h3>A request</h3>
+  <div class="flow"><span>Resident picks a topic</span><i>→</i><span>Form asks only what that topic needs</span><i>→</i><span>Gets a reference, e.g. ALT-0042</span><i>→</i><span>Goes to the manager or the committee</span><i>→</i><span>Steps + legal clock start</span><i>→</i><span>Decision with reasons</span><i>→</i><span>Resident sees the outcome</span></div>
+  <ul>
+    <li><b>Steps:</b> each topic has a checklist saying what to do and which rule it comes from.</li>
+    <li><b>Deadlines:</b> a countdown, and what happens if it's missed (for example "treated as approved").</li>
+    <li><b>Messages:</b> handlers can write to the resident or leave internal notes. Residents never see internal notes.</li>
+    <li><b>Record:</b> every change is kept, with who did it and when.</li>
+    <li><b>Reminders:</b> each morning, handlers get one email listing anything due within 7 days or overdue.</li>
+  </ul>
+
+  <h3>Altai's first topics (all drafts until Michael's documents are checked)</h3>
+  <table>
+    <tr><th>Topic</th><th>Goes to</th><th>Legal clock</th></tr>
+    <tr><td>Keep a pet</td><td>Committee</td><td>21 days</td></tr>
+    <tr><td>Renovation or alteration</td><td>Committee</td><td>Set from Altai's by-laws</td></tr>
+    <tr><td>Report an accident or incident</td><td>Building manager</td><td>None</td></tr>
+    <tr><td>Maintenance or repair</td><td>Building manager</td><td>None</td></tr>
+    <tr><td>By-law concern or complaint</td><td>Committee</td><td>None</td></tr>
+    <tr><td>Moving in or out / lift booking</td><td>Building manager</td><td>None</td></tr>
+    <tr><td>Ask for body corporate records</td><td>Committee</td><td>7 days</td></tr>
+    <tr><td>Something else</td><td>Building manager</td><td>None</td></tr>
+  </table>
+
+  <h3>Also in the first version</h3>
+  <ul>
+    <li><b>Notices:</b> for everyone, or owners only.</li>
+    <li><b>Documents:</b> minutes, by-laws and CMS, for everyone or owners only.</li>
+    <li><b>Email:</b> sign-in codes, "you're in", new-request alerts, updates, decisions and reminders.</li>
+    <li><b>Branding per building:</b> name, colours, logo and scheme number, plus a small "Powered by" line.</li>
+    <li><b>The public website:</b> what the product does, a "Book a demo" button and "Sign in to your building".</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What it won't do yet</h2>
+  <ul class="later">
+    <li>Online voting.</li>
+    <li>Inviting an outside lawyer or advisor into one matter, with their advice saved for next time.</li>
+    <li>A real email address per building that receives email into the system.</li>
+    <li>A building's own web address (for now it's the product address plus <code>?b=altai</code>).</li>
+    <li>Payments.</li>
+  </ul>
+  <h3>Things it must never do</h3>
+  <ul>
+    <li>Let one unit or building see another's information.</li>
+    <li>Call itself legal advice. The wording is "guidance, checked by your advisors".</li>
+    <li>Show Altai's rules as final before their own documents and advisors have checked them.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>How it's built</h2>
+  <ul>
+    <li><b>Where it runs:</b> its own Catalyst project, <i>BodyCorp</i>, stored in Australia. The code history goes to GitHub <i>barebayside/BodyCorp</i>; building data never goes to GitHub.</li>
+    <li><b>Parts:</b> one website (the public page plus the portal), one back-end function that does all the checking, the Catalyst database, file storage for photos and documents, Catalyst Mail, and a daily reminder job.</li>
+    <li><b>Topics are data, not code.</b> A new building, or a new business later, means new settings rather than new programming. This is where the reusable kit gets pulled out later.</li>
+  </ul>
+  <p class="mine">My calls, which you can change: sign-in by emailed code instead of passwords; the building picked by <code>?b=altai</code> in the web address for now; the same coding style as the language app.</p>
+  <div class="note">Waiting on: Michael's CMS, by-laws and information; who approves sign-ups; Altai's real unit list (the roll). The product name can come later.</div>
+</section>
+
+</main>
+</body>
+</html>

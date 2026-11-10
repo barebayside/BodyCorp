@@ -3,19 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#2f3e4e">
+<meta name="theme-color" content="#243B2F">
 <meta name="robots" content="noindex">
 <title>Building portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300&family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="portal.css">
 </head>
 <body>
 <header class="top">
-  <div class="wrap top-bar">
-    <a class="brand-link" href="#/home">
-      <img id="logo" alt="" hidden>
-      <span id="bname">Building portal</span>
-    </a>
-    <span id="who"></span>
+  <div class="strip">
+    <div class="banner" id="banner" hidden><img id="banner-img" alt="" decoding="async"></div>
+    <div class="wrap top-bar">
+      <a class="brand-link" href="#/home">
+        <img id="logo" alt="" hidden>
+        <span id="bname">Building portal</span>
+      </a>
+      <span id="who"></span>
+    </div>
   </div>
   <nav id="nav" class="wrap" aria-label="Main" hidden></nav>
 </header>
@@ -26,7 +32,9 @@
 
 <footer class="foot">
   <div class="wrap">
-    <span id="foot-line"></span><span id="foot-sep" hidden> · </span>Powered by <span class="product-name">BodyCorp</span>
+    <div class="foot-in">
+      <span id="foot-line"></span><span id="foot-sep" hidden> · </span><span>Powered by <span class="product-name">BodyCorp</span></span>
+    </div>
   </div>
 </footer>
 

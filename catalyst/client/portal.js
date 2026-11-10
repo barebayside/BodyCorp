@@ -288,7 +288,7 @@ function applyBrand(building) {
   const root = document.documentElement.style;
   if (isColour(brand.primary)) {
     root.setProperty("--brand", brand.primary.trim());
-    root.setProperty("--on-brand", isLight(brand.primary) ? "#1d2424" : "#ffffff");
+    root.setProperty("--on-brand", isLight(brand.primary) ? "#22272B" : "#F9F7EF");
     const meta = $('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", brand.primary.trim());
   }
@@ -302,6 +302,22 @@ function applyBrand(building) {
   const url = typeof brand.logo_url === "string" ? brand.logo_url.trim() : "";
   if (/^(https:\/\/|\/)/i.test(url)) { logo.src = url; logo.alt = ""; logo.hidden = false; }
   else { logo.hidden = true; logo.removeAttribute("src"); }
+
+  // Optional canopy strip: the building's photo printed in its own two colours behind the name.
+  const header = $("header.top");
+  const banner = $("#banner");
+  const bannerImg = $("#banner-img");
+  const bannerUrl = typeof brand.banner_url === "string" ? brand.banner_url.trim() : "";
+  const showBanner = (on) => { banner.hidden = !on; header.classList.toggle("has-banner", on); };
+  if (/^(https:\/\/|\/)/i.test(bannerUrl)) {
+    bannerImg.onerror = () => showBanner(false);
+    if (bannerImg.getAttribute("src") !== bannerUrl) bannerImg.src = bannerUrl;
+    showBanner(true);
+  } else {
+    bannerImg.onerror = null;
+    bannerImg.removeAttribute("src");
+    showBanner(false);
+  }
 
   const foot = [brand.footer || building.name, building.scheme_no].filter(Boolean).join(" · ");
   $("#foot-line").textContent = foot;
@@ -1524,11 +1540,13 @@ async function viewSettings(t) {
       <label for="scheme">Scheme number</label>
       <input id="scheme" value="${esc(b.scheme_no || "")}">
       <div class="colours">
-        <div><label for="primary">Main colour</label><input id="primary" type="color" value="${esc(colour(brand.primary, "#2f3e4e"))}"></div>
-        <div><label for="accent">Accent colour</label><input id="accent" type="color" value="${esc(colour(brand.accent, "#c9a227"))}"></div>
+        <div><label for="primary">Main colour</label><input id="primary" type="color" value="${esc(colour(brand.primary, "#243b2f"))}"></div>
+        <div><label for="accent">Accent colour</label><input id="accent" type="color" value="${esc(colour(brand.accent, "#898f4e"))}"></div>
       </div>
       <label for="logo-url">Logo link <span class="opt">(optional)</span></label>
       <input id="logo-url" type="url" inputmode="url" placeholder="https://" value="${esc(brand.logo_url || "")}">
+      <label for="banner-url">Banner image link <span class="opt">(optional)</span></label>
+      <input id="banner-url" type="url" inputmode="url" placeholder="https://" value="${esc(brand.banner_url || "")}">
       <label for="footer">Footer name <span class="opt">(optional)</span></label>
       <input id="footer" value="${esc(brand.footer || "")}">
       <p class="error" role="alert"></p>
@@ -1551,11 +1569,13 @@ async function viewSettings(t) {
     const logo = $("#logo-url").value.trim();
     if (!name) { err.textContent = "Add the building name."; return; }
     if (logo && !/^https:\/\//i.test(logo)) { err.textContent = "The logo link must start with https://"; return; }
+    const bannerUrl = $("#banner-url").value.trim();
+    if (bannerUrl && !/^https:\/\//i.test(bannerUrl)) { err.textContent = "The banner image link must start with https://"; return; }
     busy($("button", f), err, async () => {
       const res = await api("/admin/building", {
         body: {
           b: state.b, name, scheme_no: $("#scheme").value.trim(),
-          brand: { ...brand, primary: $("#primary").value, accent: $("#accent").value, logo_url: logo, footer: $("#footer").value.trim() },
+          brand: { ...brand, primary: $("#primary").value, accent: $("#accent").value, logo_url: logo, banner_url: bannerUrl, footer: $("#footer").value.trim() },
         },
       });
       applyBrand(res.building || { ...b, name });

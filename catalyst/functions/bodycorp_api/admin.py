@@ -109,11 +109,12 @@ def _clean_brand(brand, current):
             if not HEX.match(str(brand[key])):
                 raise bad("Colours look like #1f4d3a.")
             out[key] = brand[key]
-    if "logo_url" in brand:
-        url = str(brand["logo_url"] or "").strip()
-        if url and not url.startswith("https://"):
-            raise bad("The logo address must start with https://")
-        out["logo_url"] = url
+    for key, what in (("logo_url", "logo"), ("banner_url", "banner image")):
+        if key in brand:
+            url = str(brand[key] or "").strip()
+            if url and not url.startswith("https://"):
+                raise bad(f"The {what} address must start with https://")
+            out[key] = url
     if "footer" in brand:
         out["footer"] = str(brand["footer"] or "").strip()[:120]
     return out

@@ -66,4 +66,4 @@ def test_cron_route_needs_key(world):
     assert world.call("POST", "/cron/reminders")[1] == 403
     assert world.call("POST", "/cron/reminders", headers={"X-Cron-Key": "wrong"})[1] == 403
     body, status = world.call("POST", "/cron/reminders", headers={"X-Cron-Key": "cron-key"})
-    assert status == 200 and body == {"ok": True, "sent": 0}
+    assert status == 200 and body == {"ok": True, "sent": 0, "queue": {"sent": 0, "failed": 0, "waiting": 0}}

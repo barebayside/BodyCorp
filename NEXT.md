@@ -12,15 +12,19 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
 1. **Edward: verify the email sender.** Catalyst console (signed in as edward@barebaysidelabs.com) → BodyCorp →
    Cloud Scale → Mail → Email configuration → `edward@barebaysidelabs.com` → Verify (code is in your inbox, from
    noreply@notifications.zohocatalyst.com.au). Until then no email goes out, so nobody can sign in by code.
-2. **Read Michael's documents** (CMS, by-laws, info) when they arrive and turn them into Altai's real topics, steps
+   (Other emails wait in the mail queue and go once it's verified; ones still failing after 5 tries are given up.)
+2. **Deploy the failure check and add its cron** (built 11-10, not yet deployed). After `--only functions`, add a
+   second cron `daily_check`, e.g. 06:30 Brisbane → `POST /cron/check` with `X-Cron-Key`, same as the reminders.
+   The client still needs its "Needs attention" panel (reads `GET /failures`).
+3. **Read Michael's documents** (CMS, by-laws, info) when they arrive and turn them into Altai's real topics, steps
    and deadlines. Every topic is marked Draft until then.
-3. **Load Altai's real units** (Settings → Paste units) and remove placeholder units 1–10 (needs a small "remove
+4. **Load Altai's real units** (Settings → Paste units) and remove placeholder units 1–10 (needs a small "remove
    unit" addition; none exist yet).
-4. **Decide who approves sign-ups** at Altai, then give them the Approver role (Members → Give someone a role).
-5. **Clear the test data** once Edward has looked: test users `*.test@example.com`, request ALT-0001, the
+5. **Decide who approves sign-ups** at Altai, then give them the Approver role (Members → Give someone a role).
+6. **Clear the test data** once Edward has looked: test users `*.test@example.com`, request ALT-0001, the
    "TEST owners notice", and the four test sessions (expire 17 Nov).
-6. **Pick the product name** (one `<span class="product-name">` per page + `MAIL_FROM_NAME`).
-7. **Go live:** promote Development → Production in the console (tables, bucket, mail sender, cron, env vars must
+7. **Pick the product name** (one `<span class="product-name">` per page + `MAIL_FROM_NAME`).
+8. **Go live:** promote Development → Production in the console (tables, bucket, mail sender, cron, env vars must
    be set again on Production).
 
 ## Later (v2)
@@ -35,5 +39,13 @@ per building · the building's own web address · pull out the reusable kit.
 - Secrets live in `catalyst/functions/bodycorp_api/catalyst-config.json` (git-ignored). A deploy pushes its env vars.
 - Sessions travel in the `X-Session` header: Catalyst rejects any `Authorization` header before the function runs.
 - Catalyst stamps CREATEDTIME in Brisbane time, not UTC (`store.created_iso` converts).
-- Daily reminders: cron `daily_reminders` 07:00 Brisbane → `POST /cron/reminders` with `X-Cron-Key`.
-- Tests: `py -3.9 -m pytest -q tests` (63 pass). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.
+- Daily reminders: cron `daily_reminders` 07:00 Brisbane → `POST /cron/reminders` with `X-Cron-Key`. It retries
+  queued email first and stamps a heartbeat when done.
+- Daily self-check: cron `daily_check` → `POST /cron/check` with `X-Cron-Key`. Retries queued email, then looks
+  for: reminders not run in 26 h, email stuck over 24 h, overdue cases untouched for 3+ days, unresolved
+  failures. If any, ONE digest goes to `SUPPORT_EMAIL` (env var, edward@barebaysidelabs.com) and one to each
+  affected building's admins. Answers `{ok, problems}`; `ok` is false when there are problems.
+- Failed emails are queued in `Mail_Queue` and retried (5 min, 30 min, 2 h, 6 h; gives up after 5 tries), and
+  every failure or crash is a row in `Failures`. Admins see theirs at `GET /failures`; whoever is an admin and
+  signs in as `SUPPORT_EMAIL` sees every building's with `?all=1`. Public `GET /status` for an outside monitor.
+- Tests: `py -3.9 -m pytest -q tests` (84 pass). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.

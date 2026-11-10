@@ -31,6 +31,7 @@ DT_FORMAT = "%Y-%m-%d %H:%M:%S"
 BUILDINGS, UNITS, USERS, MEMBERSHIPS, ROLES = "Buildings", "Units", "Users", "Memberships", "Roles"
 TOPICS, CASES, EVENTS, NOTICES, DOCS = "Topics", "Cases", "Events", "Notices", "Docs"
 LOGIN_CODES, SESSIONS = "Login_Codes", "Sessions"
+FAILURES, MAIL_QUEUE = "Failures", "Mail_Queue"
 
 _TEXT = {"Brand", "Settings", "Definition", "Answers", "Steps", "Decision", "Files", "Body"}
 
@@ -56,6 +57,11 @@ SCHEMA = {
                   "sizes": {"Email": 255, "Code_Hash": 128}},
     SESSIONS: {"required": ("Token_Hash", "User_Id", "Expires_At"), "unique": ("Token_Hash",),
                "sizes": {"Token_Hash": 128}},
+    # Building_Id empty = product-wide. Resolved defaults to false in the table; we always write it anyway.
+    FAILURES: {"required": ("Kind",), "unique": (), "sizes": {"Kind": 40, "Detail": TEXT_MAX}},
+    MAIL_QUEUE: {"required": ("To_Email", "Subject", "Html", "Status"), "unique": (),
+                 "sizes": {"To_Email": TEXT_MAX, "Bcc": TEXT_MAX, "Subject": 255, "Html": TEXT_MAX,
+                           "Status": 20, "Last_Error": 255}},
 }
 
 
@@ -103,15 +109,21 @@ def parse_dt(text):
         return None
 
 
-def created_iso(row):
+def created_utc(row):
     """
-    A row's CREATEDTIME as ISO UTC with Z.
+    A row's CREATEDTIME as a naive UTC datetime, or None.
 
     Catalyst writes CREATEDTIME in the project's timezone (Australia/Brisbane,
     UTC+10, no daylight saving), not UTC, unlike the datetimes we write ourselves.
     """
     local = parse_dt(row.get("CREATEDTIME"))
-    return (local - timedelta(hours=10)).strftime("%Y-%m-%dT%H:%M:%SZ") if local else ""
+    return local - timedelta(hours=10) if local else None
+
+
+def created_iso(row):
+    """A row's CREATEDTIME as ISO UTC with Z, for the page."""
+    when = created_utc(row)
+    return when.strftime("%Y-%m-%dT%H:%M:%SZ") if when else ""
 
 
 def _literal(value):
@@ -183,24 +195,28 @@ class Db:
         except Exception:  # noqa: BLE001 — a leftover file is unreachable once its row is gone
             logger.warning("could not delete file %s", key)
 
-    def send_mail(self, to, subject, html, bcc=None):
+    def deliver(self, to, subject, html, bcc=None):
         """
-        Send through Catalyst Mail. False, never an exception, when there is no
-        verified sender yet or the send fails: the request still succeeds and
-        everything is visible in the portal.
+        Send through Catalyst Mail. None when it went, otherwise a short reason
+        (never an exception), which mailer keeps on the queued copy so the retry
+        and the failure log can say why.
         """
         sender = os.environ.get("MAIL_FROM", "").strip()
         to = [to] if isinstance(to, str) else list(to)
         if not sender:
             logger.info("mail not sent (MAIL_FROM unset): %r to %d people", subject, len(to) + len(bcc or []))
-            return False
+            return "MAIL_FROM is not set"
         mail = {"from_email": sender, "to_email": to, "subject": subject, "content": html, "html_mode": True,
                 "display_name": os.environ.get("MAIL_FROM_NAME", "") or "BodyCorp"}
         if bcc:
             mail["bcc"] = list(bcc)
         try:
             self._app.email().send_mail(mail)
-            return True
-        except Exception:  # noqa: BLE001 — a failed email must never fail the request
+            return None
+        except Exception as exc:  # noqa: BLE001 — a failed email must never fail the request
             logger.exception("mail failed: %r", subject)
-            return False
+            return "{}: {}".format(type(exc).__name__, exc)[:255]
+
+    def send_mail(self, to, subject, html, bcc=None):
+        """True if sent. False, never an exception, when there is no verified sender yet or the send fails."""
+        return self.deliver(to, subject, html, bcc) is None

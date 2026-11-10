@@ -108,7 +108,7 @@ def claim(db, user, building, claims):
         lines.append("Check them against the roll, then approve or reject.")
         body = mailer.page(building, "New sign-up to approve", lines, "Open approvals")
         for email in emails_with_roles(db, building, ("approver", "admin")):
-            mailer.send(db, email, "{}: a sign-up to approve".format(building["name"]), body)
+            mailer.send(db, email, "{}: a sign-up to approve".format(building["name"]), body, building=building)
     return me(db, context(db, user, building))["memberships"]
 
 
@@ -152,7 +152,7 @@ def decide(db, actor_ctx, building, membership_id, decision, note):
     if note:
         lines.append("Note: " + note)
     mailer.send(db, person.get("Email") or "", "{}: {}".format(building["name"], subject),
-                mailer.page(building, subject, lines, "Open the portal"))
+                mailer.page(building, subject, lines, "Open the portal"), building=building)
     return _membership_out(row, buildings.unit_labels(db, building), {str(row.get("User_Id")): person})
 
 

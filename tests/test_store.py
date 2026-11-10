@@ -65,6 +65,8 @@ def test_send_mail_failure_is_false(monkeypatch):
             raise RuntimeError("sender not verified")
     monkeypatch.setenv("MAIL_FROM", "portal@x.com")
     assert _db(Broken()).send_mail(["a@x.com"], "Hi", "x") is False
+    assert _db(Broken()).deliver(["a@x.com"], "Hi", "x") == "RuntimeError: sender not verified"
+    assert _db(FakeApp()).deliver(["a@x.com"], "Hi", "x") is None
 
 
 def test_created_iso_reads_catalyst_brisbane_time_as_utc():

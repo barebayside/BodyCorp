@@ -34,6 +34,7 @@ def env(monkeypatch):
     monkeypatch.setenv("MAIL_FROM", "portal@example.com")
     monkeypatch.setenv("MAIL_FROM_NAME", "BodyCorp")
     monkeypatch.setenv("PORTAL_URL", "https://example.com/app/portal.html")
+    monkeypatch.setenv("SUPPORT_EMAIL", "support@example.com")
 
 
 class World:

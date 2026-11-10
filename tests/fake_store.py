@@ -4,6 +4,9 @@ An in-memory store with the same methods as store.Db.
 It refuses what the Data Store refuses (missing mandatory columns, values too long,
 duplicates in unique columns) using the same SCHEMA, keeps files in a dict and
 records every email in `.outbox` instead of sending it.
+
+Set `.mail_error` to a reason to make every send fail with it, as Catalyst Mail
+does before the sender is verified. `.clock` is CREATEDTIME, in Brisbane time.
 """
 
 from datetime import datetime, timedelta
@@ -26,6 +29,7 @@ class FakeDb:
         self.tables = {name: [] for name in store.SCHEMA}
         self.files = {}
         self.outbox = []
+        self.mail_error = None
         self.next_id = 694000000500000
         self.clock = datetime(2026, 11, 10, 0, 0, 0)
 
@@ -78,9 +82,14 @@ class FakeDb:
     def delete_file(self, key):
         self.files.pop(key, None)
 
-    def send_mail(self, to, subject, html, bcc=None):
+    def deliver(self, to, subject, html, bcc=None):
+        if self.mail_error:
+            return self.mail_error
         self.outbox.append({"to": list(to), "subject": subject, "html": html, "bcc": list(bcc or [])})
-        return True
+        return None
+
+    def send_mail(self, to, subject, html, bcc=None):
+        return self.deliver(to, subject, html, bcc) is None
 
     def mail_to(self, email):
         """Every email that reached this address, directly or by blind copy."""

@@ -10,7 +10,8 @@
       "CRON_KEY": "replace-with-a-long-random-string",
       "MAIL_FROM": "verified-sender@example.com",
       "MAIL_FROM_NAME": "BodyCorp",
-      "PORTAL_URL": "https://bodycorp-7006497428.development.catalystserverless.com.au/app/portal.html"
+      "PORTAL_URL": "https://bodycorp-7006497428.development.catalystserverless.com.au/app/portal.html",
+      "SUPPORT_EMAIL": "support@example.com"
     }
   },
   "execution": {

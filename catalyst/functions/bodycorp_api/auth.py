@@ -76,7 +76,7 @@ def start(db, email, building, now=None):
     body = mailer.page(building, "Your sign-in code", [
         "Your code is: {}".format(code),
         "It works once, for 10 minutes. If you didn't ask for it, ignore this email."])
-    mailer.send(db, email, "Your sign-in code for {}: {}".format(name, code), body)
+    mailer.send(db, email, "Your sign-in code for {}: {}".format(name, code), body, building=building, secret=True)
 
 
 def _live_code(db, email, now):

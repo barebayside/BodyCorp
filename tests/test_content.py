@@ -97,6 +97,11 @@ def test_admin_routes(world):
     assert body["building"]["brand"]["accent"] == "#c9a227"
     body, status = world.call("POST", "/admin/building", {"brand": {"primary": "red"}}, email=ADMIN)
     assert status == 400
+    body, status = world.call("POST", "/admin/building", {"brand": {"banner_url": "https://x.org/park.jpg"}}, email=ADMIN)
+    assert status == 200 and body["building"]["brand"]["banner_url"] == "https://x.org/park.jpg"
+    assert body["building"]["brand"]["primary"] == "#123456"
+    body, status = world.call("POST", "/admin/building", {"brand": {"banner_url": "http://x.org/park.jpg"}}, email=ADMIN)
+    assert status == 400
     body, status = world.call("POST", "/admin/units", {"units": [{"unit_no": "11", "lot_no": "21"},
                                                                  {"unit_no": "1"}]}, email=ADMIN)
     assert status == 200 and len(body["units"]) == 11

@@ -6,7 +6,16 @@ BodyCorp API: one function behind the portal page.
     ask         ->  /topics  ->  /cases  ->  the handler's inbox  ->  steps, status, messages, decision
     read        ->  /notices, /docs
     set up      ->  /admin/bootstrap (key), /admin/building, /admin/units, /admin/topics
-    every day   ->  /cron/reminders (key)
+    every day   ->  /cron/reminders (key): retry queued email, then the due-soon digests, then a heartbeat
+                ->  /cron/check (key): retry queued email, look for trouble, email ONE digest (health.py)
+    trouble     ->  /failures (admins: their building; product admin: ?all=1), /failures/resolve
+    watching    ->  /status (public): alive, and when the self-check last ran
+
+WHEN THINGS GO WRONG
+    Every email goes through mailer.send: a failed one is queued and retried, and
+    logged as a Failures row (mailer.py, failures.py). Any crash in a request is
+    logged as a Failures row of kind "error" (route and error type, never the
+    body) before the 500, and the logging itself can never crash the answer.
 
 WHO IS ALLOWED
     Every call but the public ones carries `X-Session: <token>`. Not
@@ -18,14 +27,18 @@ WHO IS ALLOWED
 EVERY ANSWER
     JSON with "ok": true or false. 400 bad input, 401 not signed in, 403 not allowed,
     404 not found, which is also the answer for a case or document the caller may not see.
+    One exception: /cron/check answers 200 with "ok": false when it found problems,
+    so an outside monitor can read health from `ok` alone.
 
 ENVIRONMENT (catalyst-config.json)
     AUTH_SALT       mixed into sign-in code hashes
     ADMIN_KEY       X-Admin-Key for /admin/bootstrap
-    CRON_KEY        X-Cron-Key for /cron/reminders
+    CRON_KEY        X-Cron-Key for /cron/reminders and /cron/check
     MAIL_FROM       a verified Catalyst Mail sender; empty means emails are logged, not sent
     MAIL_FROM_NAME  the name emails come from
     PORTAL_URL      the portal page, for links in emails
+    SUPPORT_EMAIL   the product's support address: gets the daily check's digest, and
+                    (if also an admin somewhere) sees every building's failures
 """
 
 import json
@@ -40,6 +53,9 @@ import buildings
 import cases
 import content
 import deadlines
+import failures
+import health
+import mailer
 import people
 import store
 import topics
@@ -122,10 +138,27 @@ def bootstrap(c):
     return admin.bootstrap(c.db, c.headers.get("x-admin-key"), c.get("seed"), c.get("admin_email"))
 
 
-def cron_reminders(c):
+def _cron(c):
     if not admin.key_ok(c.headers.get("x-cron-key"), "CRON_KEY"):
         raise ApiError("Wrong cron key.", 403)
-    return {"sent": deadlines.remind(c.db, c.now)}
+
+
+def cron_reminders(c):
+    _cron(c)
+    queue = mailer.retry_queue(c.db, c.now)
+    sent = deadlines.remind(c.db, c.now)
+    failures.heartbeat(c.db, failures.HEARTBEAT_REMINDERS, "Reminders ran: {} digest(s) sent.".format(sent))
+    return {"sent": sent, "queue": queue}
+
+
+def cron_check(c):
+    _cron(c)
+    return health.check(c.db, c.now)
+
+
+def get_status(c):
+    """Public, for an outside monitor. Nothing internal: alive, and when the self-check last ran."""
+    return {"status": "alive", "checked_at": deadlines.iso_utc(failures.last_run(c.db, failures.HEARTBEAT_CHECK))}
 
 
 # ---------- me and people ----------
@@ -245,6 +278,27 @@ def doc_file(c):
     return FileResult(*content.doc_file(c.db, c.building, c.ctx, c.get("id")))
 
 
+# ---------- failures ----------
+
+def get_failures(c):
+    if c.get("all") in (True, 1, "1", "true"):
+        if not failures.is_product_admin(c.db, c.user):
+            raise forbidden("Only the product admin can see every building.")
+        return failures.listing(c.db, None, True)
+    if not c.ctx["can"]["admin"]:
+        raise forbidden("Only an admin can see this.")
+    return failures.listing(c.db, c.building, failures.is_product_admin(c.db, c.user))
+
+
+def resolve_failure(c):
+    """The product admin may resolve any; a building admin only their own building's."""
+    if failures.is_product_admin(c.db, c.user):
+        return {"failure": failures.resolve(c.db, c.user, None, c.get("id"))}
+    if not c.ctx["can"]["admin"]:
+        raise forbidden("Only an admin can do that.")
+    return {"failure": failures.resolve(c.db, c.user, c.building, c.get("id"))}
+
+
 # ---------- admin ----------
 
 def admin_building(c):
@@ -295,6 +349,10 @@ ROUTES = {
     ("POST", "/admin/units"): admin_units,
     ("POST", "/admin/topics"): admin_topics,
     ("POST", "/cron/reminders"): cron_reminders,
+    ("POST", "/cron/check"): cron_check,
+    ("GET", "/status"): get_status,
+    ("GET", "/failures"): get_failures,
+    ("POST", "/failures/resolve"): resolve_failure,
 }
 
 
@@ -318,7 +376,7 @@ def route(db, method, path, body, headers=None, now=None):
         return {"ok": False, "error": str(exc)}, 400
     if isinstance(result, FileResult):
         return result
-    return dict(result, ok=True), 200
+    return dict({"ok": True}, **result), 200     # a result may set ok itself (/cron/check)
 
 
 def _respond(body, status=200):
@@ -341,13 +399,17 @@ def _file_response(result):
 def handler(request: Request):
     if clean_path(request.path) in ("/", "/health"):
         return _respond({"ok": True, "status": "alive"})
+    db, body = None, {}
     try:
+        db = store.Db()
         sent = request.get_json(force=True, silent=True)
         body = dict(request.args.to_dict(), **(sent if isinstance(sent, dict) else {}))
-        result = route(store.Db(), request.method, request.path, body, dict(request.headers.items()))
+        result = route(db, request.method, request.path, body, dict(request.headers.items()))
         if isinstance(result, FileResult):
             return _file_response(result)
         return _respond(*result)
     except Exception as exc:  # noqa: BLE001 — the page shows this rather than a blank failure
         logger.exception("failed on %s", request.path)
+        # Route and error type only: the body may hold anything a person typed. log_error never raises.
+        failures.log_error(db, request.method, clean_path(request.path), body.get("b"), exc)
         return _respond({"ok": False, "error": "Something went wrong ({}).".format(type(exc).__name__)}, 500)

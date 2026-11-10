@@ -289,13 +289,14 @@ def _resident_email(db, row):
 
 def _email_resident(db, building, row, heading, lines):
     subject = "{}: {} {}".format(building["name"], row.get("Ref"), heading)
-    mailer.send(db, _resident_email(db, row), subject, mailer.page(building, heading, lines, "See your request"))
+    mailer.send(db, _resident_email(db, row), subject, mailer.page(building, heading, lines, "See your request"),
+                building=building)
 
 
 def _email_handlers(db, building, row, heading, lines):
     body = mailer.page(building, heading, lines, "Open the inbox")
     for email in deadlines.handler_emails(db, building, row.get("Handler")):
-        mailer.send(db, email, "{}: {}".format(building["name"], heading), body)
+        mailer.send(db, email, "{}: {}".format(building["name"], heading), body, building=building)
 
 
 def set_step(db, building, ctx, case_id, index, done, now=None):

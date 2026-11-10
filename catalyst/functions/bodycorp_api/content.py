@@ -84,7 +84,8 @@ def post_notice(db, building, ctx, title, body, audience):
     db.insert(store.NOTICES, {"Building_Id": int(building["id"]), "User_Id": int(ctx["user_id"]),
                               "Title": title, "Body": body, "Audience": audience})
     html = mailer.page(building, title, [body], "Open the portal")
-    mailer.send_many(db, audience_emails(db, building, audience), "{}: {}".format(building["name"], title), html)
+    mailer.send_many(db, audience_emails(db, building, audience), "{}: {}".format(building["name"], title), html,
+                     building=building)
     return notices(db, building, ctx)
 
 

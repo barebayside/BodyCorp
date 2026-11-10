@@ -80,5 +80,5 @@ def remind(db, now_utc):
         for email, lines in sorted(digests.items()):
             body = mailer.page(building, "Requests due soon", lines, "Open the inbox")
             subject = "{}: {} request(s) due soon or overdue".format(building["name"], len(lines))
-            sent += 1 if mailer.send(db, email, subject, body) else 0
+            sent += 1 if mailer.send(db, email, subject, body, building=building) else 0
     return sent

@@ -58,7 +58,7 @@ def _newest_first(rows):
 
 def notice_out(row):
     return {"id": str(row["ROWID"]), "title": row.get("Title"), "body": row.get("Body") or "",
-            "audience": row.get("Audience"), "created": row.get("CREATEDTIME") or ""}
+            "audience": row.get("Audience"), "created": store.created_iso(row)}
 
 
 def notices(db, building, ctx):
@@ -105,7 +105,7 @@ def delete_notice(db, building, ctx, notice_id):
 
 def doc_out(row):
     return {"id": str(row["ROWID"]), "title": row.get("Title"), "category": row.get("Category") or "",
-            "audience": row.get("Audience"), "name": row.get("File_Name") or "", "created": row.get("CREATEDTIME") or ""}
+            "audience": row.get("Audience"), "name": row.get("File_Name") or "", "created": store.created_iso(row)}
 
 
 def docs(db, building, ctx):

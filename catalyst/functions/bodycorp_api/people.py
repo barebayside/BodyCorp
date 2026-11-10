@@ -58,7 +58,7 @@ def _membership_out(row, labels, users=None):
     user = (users or {}).get(str(row.get("User_Id"))) or {}
     return {"id": str(row["ROWID"]), "unit_id": str(row.get("Unit_Id")),
             "unit_label": labels.get(str(row.get("Unit_Id")), "Unit ?"), "relation": row.get("Relation"),
-            "status": row.get("Status"), "note": row.get("Note") or "", "created": row.get("CREATEDTIME") or "",
+            "status": row.get("Status"), "note": row.get("Note") or "", "created": store.created_iso(row),
             "user_id": str(row.get("User_Id")), "user_email": user.get("Email") or "",
             "user_name": user.get("Name") or "", "email": user.get("Email") or "", "name": user.get("Name") or ""}
 

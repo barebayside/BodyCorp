@@ -1,0 +1,6 @@
+{
+  "name": "bodycorp_client",
+  "version": "0.0.1",
+  "homepage": "index.html",
+  "login_redirect": "portal.html"
+}

@@ -205,7 +205,7 @@ def summary(row, labels, now):
             "unit_id": str(row.get("Unit_Id")), "unit_label": labels.get(str(row.get("Unit_Id")), ""),
             "due_at": deadlines.iso_utc(due), "due_date": deadlines.brisbane_date(due) if due else None,
             "days_left": deadlines.days_left(due, now) if due else None, "handler": row.get("Handler"),
-            "topic_key": row.get("Topic_Key"), "created": row.get("CREATEDTIME") or ""}
+            "topic_key": row.get("Topic_Key"), "created": store.created_iso(row)}
 
 
 def _sorted(rows, labels, now):
@@ -237,7 +237,7 @@ def _events(db, row, ctx, is_handler, names):
             continue
         author = names.get(str(e.get("User_Id"))) or {}
         out.append({"id": str(e["ROWID"]), "kind": e.get("Kind"), "body": e.get("Body") or "",
-                    "internal": internal, "at": e.get("CREATEDTIME") or "",
+                    "internal": internal, "at": store.created_iso(e),
                     "author": author.get("Name") or author.get("Email") or "",
                     "from_resident": e.get("Kind") in ("created", "reply")})
     return out
@@ -348,7 +348,7 @@ def message(db, building, ctx, case_id, body, to_resident, now=None):
         _email_handlers(db, building, row, "Reply on {}".format(row.get("Ref")), [body])
     who = ctx["user"].get("name") or ctx["user"].get("email")
     return {"id": str(event["ROWID"]), "kind": event.get("Kind"), "body": body,
-            "internal": event.get("Internal") is True, "at": event.get("CREATEDTIME") or "", "author": who,
+            "internal": event.get("Internal") is True, "at": store.created_iso(event), "author": who,
             "from_resident": event.get("Kind") == "reply"}
 
 

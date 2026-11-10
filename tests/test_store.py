@@ -65,3 +65,9 @@ def test_send_mail_failure_is_false(monkeypatch):
             raise RuntimeError("sender not verified")
     monkeypatch.setenv("MAIL_FROM", "portal@x.com")
     assert _db(Broken()).send_mail(["a@x.com"], "Hi", "x") is False
+
+
+def test_created_iso_reads_catalyst_brisbane_time_as_utc():
+    # Catalyst stamps CREATEDTIME in the project's timezone (Brisbane, UTC+10).
+    assert store.created_iso({"CREATEDTIME": "2026-11-10 16:22:36:151"}) == "2026-11-10T06:22:36Z"
+    assert store.created_iso({}) == ""

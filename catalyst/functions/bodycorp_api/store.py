@@ -19,7 +19,7 @@ SCHEMA
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger("bodycorp_api.store")
 
@@ -101,6 +101,17 @@ def parse_dt(text):
         return datetime.strptime(str(text)[:19], DT_FORMAT)
     except (TypeError, ValueError):
         return None
+
+
+def created_iso(row):
+    """
+    A row's CREATEDTIME as ISO UTC with Z.
+
+    Catalyst writes CREATEDTIME in the project's timezone (Australia/Brisbane,
+    UTC+10, no daylight saving), not UTC, unlike the datetimes we write ourselves.
+    """
+    local = parse_dt(row.get("CREATEDTIME"))
+    return (local - timedelta(hours=10)).strftime("%Y-%m-%dT%H:%M:%SZ") if local else ""
 
 
 def _literal(value):

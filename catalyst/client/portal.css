@@ -801,3 +801,83 @@ body.wide .prop, body.wide .apply-box, body.wide .prop-group h3.sub { max-width:
 .a-q { margin: 0 0 2px; font: 400 21px/1.35 var(--serif); color: var(--brand); overflow-wrap: anywhere; }
 .a-text { margin: 8px 0 12px; overflow-wrap: anywhere; }
 .unconfirmed-banner { margin: 12px 0; padding: 10px 14px; background: var(--stone); border-left: 3px solid var(--ink); }
+
+/* ---------------------------------------------------------------- the rules loop (#/rules…)
+   Same park language: hairline rows, serif headings, Olive-ruled notes; Rust only for what is late. */
+
+.rule-line { align-items: center; }
+.rl-key {
+  flex: 0 0 auto; min-width: 5.2em; font: 600 11.5px/1.6 var(--sans); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent-ink); font-variant-numeric: tabular-nums;
+}
+.rl-meta { display: block; font-size: 14px; color: var(--muted); font-weight: 400; margin-top: 2px; overflow-wrap: anywhere; }
+.mini-row .grow > b { font-weight: 500; }
+.rl-state { flex: 0 0 auto; font-size: 14px; color: var(--body2); }
+.rl-state.draft-state { font: 300 italic 15px/1.3 var(--serif); color: var(--accent-ink); }
+.rl-state.todo { color: var(--brand); font-weight: 600; }
+
+/* The seven stages: a numbered hairline list, the current one ruled in the building's colour. */
+.change-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 48px; align-items: start; }
+@media (min-width: 980px) {
+  .change-grid { grid-template-columns: 300px minmax(0, 1fr); }
+  .change-grid aside { position: sticky; top: 18px; }
+}
+.loop { list-style: none; padding: 0; margin: 0 0 36px; border-top: 1px solid var(--line); }
+.loop li { display: flex; gap: 14px; padding: 12px 0 12px 12px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+.loop li.on { border-left-color: var(--brand); background: var(--mint); }
+.lp-no { font: 300 22px/1.1 var(--serif); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.4em; }
+.loop li.done .lp-no { color: var(--accent-ink); }
+.loop li.on .lp-no { color: var(--brand); }
+.loop .grow { min-width: 0; }
+.loop b { font-weight: 500; display: block; }
+.loop li:not(.done):not(.on) b { color: var(--muted); }
+.lp-meta { display: block; font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+.loop li.done .lp-meta::before { content: "\2713\00a0"; color: var(--accent-ink); }
+.stage-panel h2 { margin-bottom: 8px; }
+.stage-panel > p { max-width: 64ch; color: var(--body2); }
+.check-form { margin-top: 30px; padding-top: 18px; border-top: 2px solid var(--brand); }
+.check-form .btn { margin-top: 12px; }
+
+.rule-card { padding: 22px 0 22px; border-bottom: 1px solid var(--line); max-width: 860px; }
+.rule-card:first-of-type { border-top: 1px solid var(--line); margin-top: 18px; }
+.rule-card h3 { font-size: 22px; margin: 4px 0 10px; }
+.rule-facts { margin: 0 0 6px; }
+.rule-facts > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 18px; padding: 7px 0; border-top: 1px solid var(--line); }
+@media (min-width: 620px) { .rule-facts > div { grid-template-columns: 9.5em minmax(0, 1fr); } }
+.rule-facts dt { font-size: 14px; color: var(--muted); }
+.rule-facts dd { margin: 0; overflow-wrap: anywhere; }
+.rule-card.has-problems h3 { color: var(--ink); }
+
+.impact-row { align-items: center; }
+.impact-acts { display: flex; flex-wrap: wrap; gap: 4px 20px; flex: 1 1 100%; }
+@media (min-width: 700px) { .impact-acts { flex: 0 0 auto; } }
+.lawyer-line { margin: 30px 0 0; padding: 14px 18px; background: var(--stone); }
+.lawyer-line .label { margin: 0 0 4px; }
+.lawyer-line p { margin: 0 0 6px; max-width: 64ch; }
+
+.pack { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.pack:first-of-type { border-top: 1px solid var(--line); margin-top: 14px; }
+.pack.old { color: var(--muted); }
+.pack .label { margin: 0 0 4px; }
+.pack-items { list-style: none; padding: 0; margin: 12px 0 0; counter-reset: pi; }
+.pack-items li { display: flex; gap: 10px 16px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line); counter-increment: pi; }
+.pack-items li::before { content: counter(pi); min-width: 1.4em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pack-items .grow { flex: 1 1 auto; min-width: 0; }
+.pack-items li.queried { box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
+.pi-comment { display: block; font: 300 italic 16px/1.4 var(--serif); color: var(--ink); margin-top: 4px; }
+
+.why-list { list-style: none; padding: 0; margin: 0 0 8px; border-top: 1px solid var(--line); }
+.why-list li { padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--body2); }
+.why-list b { color: var(--brand); font-weight: 600; }
+.notify .people { margin-top: 22px; }
+.notify .people .label { margin: 18px 0 2px; }
+.notify .people .check { margin: 6px 0; }
+.notify .actions { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; margin-top: 22px; }
+.field-check { margin-top: 52px !important; }
+@media (max-width: 519px) { .field-check { margin-top: 14px !important; } }
+.law-section { margin: 0; border-bottom: 1px solid var(--line); }
+.law-section > summary { padding: 14px 0; font-weight: 500; }
+.law-section .mini-rows { margin-bottom: 14px; }
+.more-form { margin-top: 24px; }
+.more-form > summary { font-weight: 500; }
+.rl-key { min-width: 4.6em; }

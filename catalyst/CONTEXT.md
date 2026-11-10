@@ -41,5 +41,14 @@ failure (Catalyst returns an empty 200 when a function runs out of memory).
 - Once a request type has rows in `Topic_Versions`, change it through a version (admin edits record one
   automatically, `topics.note_version`); the daily job copies the version in force into `Topics`, so a direct
   edit of `Topics` alone would be overwritten.
+- Varchar columns can't be longer than 255: Create_Column silently makes a longer `max_length` 255, and a column's
+  type can't be changed afterwards (rename it to a 255-character use and add a new text column). Anything longer is
+  `text`. TRIGGER, ACTION and SECTION are SQL words: `Trigger_Text`, `Action_Text`, `Rule_Section` (2026-11-10).
+- The rules loop's law layer is `Building_Id = 0` (shared by every building of the state). Read it with the
+  building's own rows (`rules._rule_rows`); only the portal owner (SUPPORT_EMAIL) writes it.
+- Catalyst Mail attachments must be open files: `store.Db.deliver` writes them to the temp folder first. A queued
+  retry goes WITHOUT the attachment (the queue holds HTML only); the legal pack's email carries a link to the PDF.
+- The lawyer's page (`client/lawyer.html`, `lawyer.js`, `lawyer.css`) has no sign-in: `/pack*` routes are public and
+  answer 404 for any wrong, expired or replaced token. Never add a building-scoped route without `b`.
 - The fake store keeps whatever type `update` was given (an int id stays an int); Catalyst gives strings back.
   Compare ids as `str(...)` in tests.

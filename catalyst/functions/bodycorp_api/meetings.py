@@ -205,6 +205,10 @@ def create(db, building, ctx, title, starts_at, place, items, short_notice, now=
         m = _motion(db, building, row["ROWID"], words)
         agenda.append({"kind": "confirm_vocm", "text": "Confirm the vote outside a meeting of {}".format(when),
                        "motion_id": str(m["ROWID"]), "vocm_id": str(vocm["ROWID"])})
+    import rules                      # here, not at the top: rules imports this module's neighbours
+    changed = rules.agenda_item(db, building, row["ROWID"], starts)
+    if changed:
+        agenda.append(changed)
     for item in clean:
         entry = {"kind": "item", "text": item["text"]}
         if item["case"]:
@@ -502,7 +506,9 @@ def draft_minutes(db, building, row, now):
     lines += animals
     lines.append("6. Motions and votes:" + ("" if motions else " none"))
     lines += motions
-    lines.append("7. Correspondence, reports and documents tabled: (add here)")
+    changed = [i["text"] for i in _agenda(row) if i.get("kind") == "rules_changed"]
+    lines.append("7. Correspondence, reports and documents tabled: " + ("; ".join(changed) + "; " if changed else "")
+                 + "(add here)")
     closed = store.parse_dt(row.get("Closed_At"))
     lines.append("8. Meeting closed at: {}".format(local_text(closed) if closed else "(time)"))
     later = [r for r in db.find(store.MEETINGS, {"Building_Id": int(building["id"])})

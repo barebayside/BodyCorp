@@ -42,6 +42,17 @@ Updated 2026-11-10 · Source: build session 11-10 (v1 built and live on Developm
    people positions (Members → Give someone a role: Chair, Secretary, Treasurer, Committee member) and, once the CMS
    arrives, records the regulation module and the secretary's contact address (Board → Who does what). Until the
    module is recorded admins see "Module not recorded — committee rules are guidance only".
+0f. **The rules loop: built 2026-11-10, not yet deployed** (spec
+   `docs/superpowers/specs/2026-11-10-rules-loop-design.md`). Law → building rules → products; one change goes round
+   seven checked stages (read, rules, impact, ONE legal pack to the lawyer by email with the PDF and a private
+   expiring link, the chair's sign-off, apply from a date, tell the right people from a list a person ticks). Tables
+   `Rules`, `Rule_Links`, `Changes`, `Legal_Packs`, `Pack_Items`, `Notify_Plans` and column
+   `Rule_Proposals.Change_Id` already exist on the test copy. To turn it on: deploy functions and client (the client
+   now includes `lawyer.html`, `lawyer.js`, `lawyer.css`), then sign in as edward@ (the portal owner) and press
+   Rules → "Load the 44 Queensland committee rules" (or `POST /rules/seed {b:"altai", from:"qld"}`): the 44 become a
+   law change at stage 01 and Altai's request types are linked to them. Then walk that change to the lawyer once.
+   **Open for Edward:** which lawyer (name, email); whether the chair is the right sign-off (duty `rules_signoff`,
+   changeable per building); whether a resolution that changes no resident form may skip the lawyer (built that way).
 0e. **AI compliance helper: wired 2026-11-10, not yet deployed** (spec
    `docs/superpowers/specs/2026-11-10-ai-compliance-helper-design.md`). Tables `Doc_Versions`, `Rule_Reviews`,
    `Rule_Proposals`, `Topic_Versions`, `AI_Usage`, `AI_Questions` and column `Cases.Topic_Version` already exist on the
@@ -116,4 +127,13 @@ per building · the building's own web address · pull out the reusable kit.
   Headless AI screens: `py -3.9 <scratchpad>/mock/ai_backend.py catalyst/client 8795` (fake AI, no API calls).
 - Headless check of the committee screens: `py -3.9 <scratchpad>/mock/mock_api.py catalyst/client 8790 --real`
   runs the real function code over the tests' fake store (sign in with any seeded email, code 123456).
-- Tests: `py -3.9 -m pytest -q tests` (84 pass before the committee view; 122 with it; 211 with the AI helper wired). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.
+- The rules loop (2026-11-10, `rules.py`, `legal.py`, `pdfgen.py`). Committee screens `#/rules`, `#/rules/new`,
+  `#/rules/change/<id>`, `#/rules/rule/<key>`; the lawyer's page `lawyer.html?t=<token>` (no sign-in, 30-day link,
+  only that pack). Who runs a change: duty `rules` (secretary); who signs for the committee: duty `rules_signoff`
+  (chair). A law change: the portal owner only. Nothing applies without the lawyer (where needed) and the committee;
+  open requests keep their rules (Topic_Versions). Every applied change is listed on the next committee meeting's
+  agenda ("Rules changed since the last meeting") and in the minutes draft (item 7). An AI by-law review that is
+  part of a change can only apply through the loop. Headless walk: `py -3.9 <scratchpad>/mock/rules_backend.py
+  catalyst/client 8797` (every stage seeded), then `py -3.13 <scratchpad>/mock/shots_rules.py http://127.0.0.1:8797 out`.
+- Tests: `py -3.9 -m pytest -q tests` (84 pass before the committee view; 122 with it; 211 with the AI helper wired;
+  232 with the rules loop). Design: `docs/design.html`; plan: `docs/superpowers/plans/`.

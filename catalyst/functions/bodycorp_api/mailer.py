@@ -91,11 +91,13 @@ def page(building, heading, lines, button=None, link=None):
     ).format(p=primary, n=name, h=_text(heading), body=paragraphs, action=action, f=footer)
 
 
-def _deliver(db, to, subject, body_html, bcc):
+def _deliver(db, to, subject, body_html, bcc, attachments=None):
     """None if Catalyst Mail took it, else why not. Never raises."""
     if not os.environ.get("MAIL_FROM", "").strip():
         return "MAIL_FROM is not set"
     try:
+        if attachments:
+            return db.deliver(to, subject, body_html, bcc=bcc or None, attachments=attachments)
         return db.deliver(to, subject, body_html, bcc=bcc or None)
     except Exception as exc:  # noqa: BLE001 — a failed email must never fail the request
         logger.exception("mail failed: %r", subject)
@@ -116,18 +118,20 @@ def _queue(db, to, subject, body_html, bcc, building_id, reason):
         return None
 
 
-def send(db, to, subject, body_html, bcc=None, building=None, secret=False):
+def send(db, to, subject, body_html, bcc=None, building=None, secret=False, attachments=None):
     """
     True if sent now. Never raises. A failed send is queued for retry and logged
     (see THE QUEUE); `building` tags those rows so that building's admins see them.
     `secret` (sign-in codes) logs a failure but never stores the email.
+    `attachments` [(name, bytes)] go with the first try only: the queue keeps HTML, so a
+    retried copy goes without them (the legal pack's email carries a link to the same PDF).
     """
     to = [t for t in ([to] if isinstance(to, str) else list(to or [])) if t]
     bcc = [b for b in (bcc or []) if b]
     if not to:
         return False
     building_id = (building or {}).get("id")
-    reason = _deliver(db, to, subject, body_html, bcc)
+    reason = _deliver(db, to, subject, body_html, bcc, attachments)
     too_long = len(body_html) > store.TEXT_MAX
     if reason is None:
         if too_long:

@@ -96,6 +96,43 @@ docs/superpowers/specs/2026-11-10-ai-compliance-helper-design.md)
     Requests are pinned: Cases.Topic_Version is the request-type version in force when it was lodged
     (topics.for_case); every case screen, button, deadline and vote reads that version.
 
+THE RULES LOOP (2026-11-10; rules.py, legal.py, pdfgen.py; spec docs/superpowers/specs/2026-11-10-rules-loop-design.md)
+    Three layers: law (Building_Id 0, shared by every building of the state), building, products (request types and
+    code features). Products link to rules (Rule_Links); rules cite clauses (Rules.Citations, quotes checked).
+    One change = Changes row, seven stages, each ending at a check (Stage_Checks):
+    read -> rules -> impact -> legal (ONE pack to the lawyer) -> committee (chair) -> apply (from a date; open
+    requests keep their rules) -> notify (a person ticks the exact list and sends). Committee roles and admins
+    only; residents and the manager 403; another building's ids 404. A law change: the portal owner only.
+    GET  /rules                      -> {in_force, changes, motions_to_implement, to_notify, can_start, can_law, ...}
+    GET  /rules/rule {key}           -> {rule, versions, links, ...};  POST /rules/links {rule_key, product_kind,
+                                         topic_key?, product_path, note | remove: link id}
+    POST /rules/seed {from: "qld"}   the 44 rules of law file §8 as a law change at stage 01 (owner, once) and this
+                                     building's request types linked to them (idempotent)
+    GET  /rules/changes;  POST /rules/changes {source_kind: doc|motion|manual|law_file, source_id?, title, summary,
+                                               items?, layer?: law}
+    GET  /rules/change {id}          -> {change, stages: [{key, label, done, current, by, gate: {ok, why}}], items,
+                                         rules, impact, proposals, packs, notify, can}
+    POST /rules/change/check {id, stage: read|rules|impact, note}   refused (400) while the stage's gate fails
+    POST /rules/change/rule {id, title, trigger, action, who, duty, deadline_text, deadline_days, if_missed,
+                             citations: [{source: law|change, clause, quote}], rule_key?, retire?, rule_id?, remove?}
+    POST /rules/change/ai-draft {id}                 (AI on) drafts rules; each must be accepted
+    POST /rules/change/rule/accept {id, rule_id}
+    POST /rules/change/product {id, topic_key, kind, title, why, rule_keys, changes | definition}
+    POST /rules/change/product/decide {id, proposal_id, decision: approve|reject, note}
+    POST /rules/change/impact {id, key, decision: no_change|code|"", note}
+    POST /rules/change/lawyer {id, force}            the chair, the runner or an admin asks for the lawyer
+    POST /rules/pack/send {id, lawyer_name, lawyer_email, days?}  -> {pack, link, token}  (email + PDF + link)
+    POST /rules/pack/relink {pack_id};  POST /rules/pack/email-signoff {pack_id, name, date, file, note}
+    GET  /rules/pack/pdf {pack_id};  GET /rules/pack/reply {pack_id}
+    POST /rules/change/reopen {id, to: rules|impact};  POST /rules/change/signoff {id};
+    POST /rules/change/apply {id, effective_from?};  POST /rules/change/cancel {id}
+    GET  /rules/notify {id};  POST /rules/notify {id, recipients, channels, subject, body, notice_audience};
+    POST /rules/notify/send {id}     sends ONLY to the saved list (email, phone, notice board)
+    PUBLIC, the lawyer's link (no sign-in, no b; the token opens that pack only; wrong, expired or superseded = 404):
+    GET /pack {t};  GET /pack/pdf {t};  POST /pack/item {t, item_id, tick: ok|query, comment};
+    POST /pack/sign {t, name, note} (every item ticked, none queried);  POST /pack/comments {t, note}
+    A new committee meeting's agenda lists "Rules changed since the last meeting" (Notify_Plans.Meeting_Id).
+
 EVERY ANSWER
     JSON with "ok": true or false. 400 bad input, 401 not signed in, 403 not allowed,
     404 not found, which is also the answer for a case or document the caller may not see.
@@ -135,11 +172,13 @@ import content
 import deadlines
 import failures
 import health
+import legal
 import mailer
 import meetings
 import people
 import pipeline
 import push
+import rules
 import store
 import tasks
 import topics
@@ -524,6 +563,20 @@ def ai_doc_file(c):
     return FileResult(*ai.doc_file(c))
 
 
+# ---------- the rules loop (rules.py, legal.py) ----------
+
+def rules_pack_pdf(c):
+    return FileResult(*legal.pack_pdf(c))
+
+
+def rules_pack_reply(c):
+    return FileResult(*legal.reply_file(c))
+
+
+def public_pack_pdf(c):
+    return FileResult(*legal.public_pdf(c))
+
+
 # ---------- admin ----------
 
 def admin_building(c):
@@ -622,6 +675,38 @@ ROUTES = {
     ("POST", "/ai/versions/undo"): ai.post_undo,
     ("POST", "/ai/ask"): ai.post_ask,
     ("GET", "/ai/questions"): ai.get_questions,
+    ("GET", "/rules"): rules.get_rules,
+    ("GET", "/rules/rule"): rules.get_rule,
+    ("POST", "/rules/links"): rules.post_links,
+    ("POST", "/rules/seed"): rules.post_seed,
+    ("GET", "/rules/changes"): rules.get_changes,
+    ("POST", "/rules/changes"): rules.post_change,
+    ("GET", "/rules/change"): rules.get_change,
+    ("POST", "/rules/change/check"): rules.post_check,
+    ("POST", "/rules/change/rule"): rules.post_rule,
+    ("POST", "/rules/change/ai-draft"): rules.post_ai_draft,
+    ("POST", "/rules/change/rule/accept"): rules.post_rule_accept,
+    ("POST", "/rules/change/product"): rules.post_product,
+    ("POST", "/rules/change/product/decide"): rules.post_product_decide,
+    ("POST", "/rules/change/impact"): rules.post_impact,
+    ("POST", "/rules/change/lawyer"): rules.post_force_lawyer,
+    ("POST", "/rules/change/reopen"): rules.post_reopen,
+    ("POST", "/rules/change/signoff"): rules.post_signoff,
+    ("POST", "/rules/change/apply"): rules.post_apply,
+    ("POST", "/rules/change/cancel"): rules.post_cancel,
+    ("POST", "/rules/pack/send"): legal.post_send,
+    ("POST", "/rules/pack/relink"): legal.post_relink,
+    ("POST", "/rules/pack/email-signoff"): legal.post_email_signoff,
+    ("GET", "/rules/pack/pdf"): rules_pack_pdf,
+    ("GET", "/rules/pack/reply"): rules_pack_reply,
+    ("GET", "/rules/notify"): rules.get_notify,
+    ("POST", "/rules/notify"): rules.post_notify,
+    ("POST", "/rules/notify/send"): rules.post_notify_send,
+    ("GET", "/pack"): legal.public_pack,
+    ("GET", "/pack/pdf"): public_pack_pdf,
+    ("POST", "/pack/item"): legal.public_item,
+    ("POST", "/pack/sign"): legal.public_sign,
+    ("POST", "/pack/comments"): legal.public_comments,
 }
 
 

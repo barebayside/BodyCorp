@@ -18,7 +18,7 @@ Layer 2: routing only. Rules and reference live in `docs/`; per-building facts i
 |---|---|---|
 | Fix or add a feature | `catalyst/CONTEXT.md` | the spec in `docs/superpowers/specs/` for that feature |
 | New building, or a building's first CMS/by-laws | `workspaces/01_onboard-building/CONTEXT.md` | `buildings/<slug>/record.md` |
-| By-laws or CMS changed (before the in-portal AI review exists) | `workspaces/01_onboard-building/CONTEXT.md` § 03 | the old and new documents |
+| By-laws, CMS, the law or a resolution changed (a live building) | the portal's Rules screen (`#/rules`), the rules loop | `docs/superpowers/specs/2026-11-10-rules-loop-design.md` |
 | A building's look, or the product site's look | `workspaces/02_design-look/CONTEXT.md` | `docs/design/design-brief.md` |
 | Put a change on the live site | `workspaces/03_release/CONTEXT.md` | `NEXT.md` § How it runs |
 | "Is the committee allowed to…?" | `docs/compliance/qld-committee-rules.md` § 8 | the building's CMS/by-laws |

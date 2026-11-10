@@ -36,9 +36,13 @@ MOTIONS, BALLOTS, MEETINGS, TASKS = "Motions", "Ballots", "Meetings", "Tasks"
 PUSH_SUBS = "Push_Subs"
 DOC_VERSIONS, RULE_REVIEWS, RULE_PROPOSALS = "Doc_Versions", "Rule_Reviews", "Rule_Proposals"
 TOPIC_VERSIONS, AI_USAGE, AI_QUESTIONS = "Topic_Versions", "AI_Usage", "AI_Questions"
+RULES, RULE_LINKS, CHANGES = "Rules", "Rule_Links", "Changes"
+LEGAL_PACKS, PACK_ITEMS, NOTIFY_PLANS = "Legal_Packs", "Pack_Items", "Notify_Plans"
 
 _TEXT = {"Brand", "Settings", "Definition", "Answers", "Steps", "Decision", "Files", "Body", "Words", "Eligible",
-         "Tally", "Agenda", "Attendance", "Minutes", "Detail", "Endpoint", "Sub_Keys"}
+         "Tally", "Agenda", "Attendance", "Minutes", "Detail", "Endpoint", "Sub_Keys", "Trigger_Text", "Action_Text",
+         "If_Missed", "Citations", "Summary", "Stage_Checks", "Impact_Json", "Lawyer_Why", "Note", "Comment",
+         "Groups_Json", "Recipients"}
 
 SCHEMA = {
     BUILDINGS: {"required": ("Slug",), "unique": ("Slug",),
@@ -104,6 +108,25 @@ SCHEMA = {
     AI_QUESTIONS: {"required": ("Building_Id", "User_Id", "Question", "Status"), "unique": (),
                    "sizes": {"Question": TEXT_MAX, "Answer": TEXT_MAX, "Citations": TEXT_MAX, "Model": 40,
                              "Status": 20, "Batch_Id": 100}},
+    # The rules loop (2026-11-10, rules.py, legal.py). Building_Id 0 = the law layer, shared by every building of
+    # that state. Varchar columns can't be longer than 255 in the Data Store (it caps them silently), so anything
+    # longer is text. TRIGGER, ACTION and SECTION are SQL words, hence Trigger_Text, Action_Text, Rule_Section.
+    RULES: {"required": ("Building_Id", "Layer", "Jurisdiction", "Rule_Key", "Version", "Title", "Trigger_Text",
+                         "Action_Text", "Who", "Citations", "Status"), "unique": (),
+            "sizes": {"Layer": 10, "Jurisdiction": 10, "Reg_Module": 20, "Rule_Key": 60, "Rule_Section": 100,
+                      "Title": 255, "Who": 255, "Duty": 60, "Deadline_Text": 255, "Status": 20}},
+    RULE_LINKS: {"required": ("Building_Id", "Rule_Key", "Product_Kind", "Product_Path"), "unique": (),
+                 "sizes": {"Rule_Key": 60, "Product_Kind": 20, "Topic_Key": 60, "Product_Path": 255, "Note": 255}},
+    CHANGES: {"required": ("Building_Id", "Layer", "Entry_Point", "Source_Kind", "Title", "Stage"), "unique": (),
+              "sizes": {"Layer": 10, "Entry_Point": 10, "Source_Kind": 20, "Title": 255, "Stage": 20, "Items_Key": 255,
+                        "Error": 255}},
+    LEGAL_PACKS: {"required": ("Building_Id", "Change_Id", "Pack_No", "Status"), "unique": (),
+                  "sizes": {"Status": 20, "Lawyer_Name": 255, "Lawyer_Email": 255, "Token_Hash": 128, "Pdf_Key": 255,
+                            "Snapshot_Key": 255, "Signed_Name": 255, "Signed_Via": 10, "Reply_Key": 255}},
+    PACK_ITEMS: {"required": ("Building_Id", "Pack_Id", "Item_No", "Item_Kind", "Title"), "unique": (),
+                 "sizes": {"Item_Kind": 20, "Ref_Id": 60, "Title": 255, "Tick": 10}},
+    NOTIFY_PLANS: {"required": ("Building_Id", "Change_Id", "Status"), "unique": (),
+                   "sizes": {"Status": 20, "Channels": 100, "Notice_Audience": 20, "Subject": 255}},
 }
 
 
@@ -237,11 +260,12 @@ class Db:
         except Exception:  # noqa: BLE001 — a leftover file is unreachable once its row is gone
             logger.warning("could not delete file %s", key)
 
-    def deliver(self, to, subject, html, bcc=None):
+    def deliver(self, to, subject, html, bcc=None, attachments=None):
         """
         Send through Catalyst Mail. None when it went, otherwise a short reason
         (never an exception), which mailer keeps on the queued copy so the retry
-        and the failure log can say why.
+        and the failure log can say why. `attachments` = [(file name, bytes)]: Catalyst
+        Mail wants open files, so each is written to the function's temp folder first.
         """
         sender = os.environ.get("MAIL_FROM", "").strip()
         to = [to] if isinstance(to, str) else list(to)
@@ -252,12 +276,25 @@ class Db:
                 "display_name": os.environ.get("MAIL_FROM_NAME", "") or "BodyCorp"}
         if bcc:
             mail["bcc"] = list(bcc)
+        handles = []
         try:
+            if attachments:
+                import tempfile
+                folder = tempfile.mkdtemp()
+                for name, data in attachments:
+                    path = os.path.join(folder, os.path.basename(str(name)) or "file")
+                    with open(path, "wb") as out:
+                        out.write(data)
+                    handles.append(open(path, "rb"))
+                mail["attachments"] = handles
             self._app.email().send_mail(mail)
             return None
         except Exception as exc:  # noqa: BLE001 — a failed email must never fail the request
             logger.exception("mail failed: %r", subject)
             return "{}: {}".format(type(exc).__name__, exc)[:255]
+        finally:
+            for handle in handles:
+                handle.close()
 
     def send_mail(self, to, subject, html, bcc=None):
         """True if sent. False, never an exception, when there is no verified sender yet or the send fails."""

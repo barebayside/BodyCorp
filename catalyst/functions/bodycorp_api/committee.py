@@ -50,6 +50,10 @@ DUTIES = {
                  "SM s 163, s 170: body corporate duties (practice, UNCONFIRMED)"),
     "tasks": ("Default owner of tasks from resolutions", "secretary", "Committee practice"),
     "vote": ("Vote on motions", "voting", "SM s 65, s 67: every voting member entitled to vote"),
+    "rules": ("Run rules changes: read, draft, find what they change, send the legal pack, tell people", "secretary",
+              "Committee practice (rules loop)"),
+    "rules_signoff": ("Sign off a rules change for the committee", "chair",
+                      "Committee practice. UNCONFIRMED: the chair has no extra authority (law file §3)"),
 }
 
 

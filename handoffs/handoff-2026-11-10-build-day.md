@@ -30,8 +30,8 @@ Whole repo `Desktop\bodycorp-portal` (GitHub `barebayside/BodyCorp`, main). Key:
 ai-compliance-helper, five-features, rules-loop), `docs/design/*`, `docs/compliance/*`, `NEXT.md`, ICM files.
 
 ## What's NOT Done
-- **Rules loop** (the ICM backbone: read → rules → impact → legal pack → chair → apply → notify) — being built by a
-  background agent at session end; NOT committed/deployed. Check `git status`, run tests, review, deploy.
+- **Rules loop** — BUILT, 232 tests, on the TEST copy and committed (spec `docs/superpowers/specs/2026-11-10-rules-loop-design.md`).
+  Not yet on live. To start it: Rules → "Load the 44 Queensland committee rules". Owed by Edward: which lawyer (name + email).
 - **Pricing research** (competitors + strata management fees) — background agent; notes land in
   `C:\Users\User\research_notes\Strata online application tracking software\pricing_competitors.md`.
 - **Daily jobs on live:** a Job Scheduling deployment ("Daily jobs to live") was at diff generation — finish it in
@@ -58,5 +58,5 @@ ai-compliance-helper, five-features, rules-loop), `docs/design/*`, `docs/complia
 - Auto mode blocks writing production secrets — Edward switches it off for that step.
 
 ## Quick Context for Next Session
-Open `NEXT.md` (item 00 = live go-live steps). Start with: commit/review the rules loop, finish the jobs deploy +
+Open `NEXT.md` (item 00 = live go-live steps). Start with: finish the jobs deploy +
 disable test crons, verify the domain + SSL, deploy the new landing page to live, then the go-live check.

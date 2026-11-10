@@ -369,6 +369,7 @@ function drawChrome() {
   if (approvedUnits().length || isStaff()) items.push(["#/home", "Home"]);
   if (c.handle) items.push(["#/board", "Board"]);
   if (c.committee) items.push(["#/votes", "Votes"], ["#/meetings", "Meetings"], ["#/tasks", "Tasks"]);
+  if (c.committee) items.push(["#/rules", "Rules"]);
   if (c.aiSee) items.push(["#/ai", "By-laws"]);
   if (c.approve) items.push(["#/approvals", "Approvals"], ["#/members", "Members"]);
   if (c.handle) items.push(["#/notices", "Notices"], ["#/docs", "Documents"]);
@@ -387,6 +388,7 @@ function markNav() {
   if (h.startsWith("#/meeting/") || h.startsWith("#/minutes/")) h = "#/meetings";
   if (h.startsWith("#/new") || h.startsWith("#/request/")) h = "#/home";
   if (h.startsWith("#/ai/") || h === "#/ask") h = "#/ai";
+  if (h.startsWith("#/rules/")) h = "#/rules";
   if (h === "#/settings/ai") h = "#/settings";
   $$("#nav a").forEach((a) => {
     const on = h === a.dataset.nav || h.startsWith(a.dataset.nav + "/");
@@ -501,6 +503,10 @@ const ROUTES = [
   { re: /^#\/ai\/doc\/(.+)$/, view: viewAiDoc, need: "aiSee" },
   { re: /^#\/ai\/review\/(.+)$/, view: viewAiReview, need: "aiSee", wide: true },
   { re: /^#\/ai\/history(?:\/(.+))?$/, view: viewAiHistory, need: "aiSee" },
+  { re: /^#\/rules$/, view: viewRules, need: "committee" },
+  { re: /^#\/rules\/new$/, view: viewRulesNew, need: "committee" },
+  { re: /^#\/rules\/change\/(.+)$/, view: viewChange, need: "committee", wide: true },
+  { re: /^#\/rules\/rule\/(.+)$/, view: viewRule, need: "committee" },
 ];
 
 let seq = 0;   // each route() call gets a number; a slower, older one stops drawing
@@ -2923,6 +2929,639 @@ async function viewAiSettings(t) {
       route();
     });
   });
+}
+
+// ------------------------------------------------------------------ the rules loop (#/rules…)
+// Law → building rules → products. One change goes round seven stages, each ending at a check:
+// read, rules, impact, legal (one pack to the lawyer), committee (the chair), apply (from a date), notify.
+// The server enforces every gate; the page shows why a stage can't be ticked yet.
+
+const RULE_STATE = { applied: "In force", coming: "Coming", draft: "Draft, not in force yet", withdrawn: "Dropped" };
+const ruleTag = (r) => (r.key.startsWith("qld_sm_") ? "QLD rule " + r.key.slice(7) : r.layer === "law" ? "Queensland law" : "This building");
+const MARK_WORDS = { new: "New", changed: "Changed", removed: "Removed" };
+const DUTY_CHOICES = [["", "Not a position"], ["secretary", "Secretary"], ["chair", "Chair"], ["treasurer", "Treasurer"],
+  ["committee", "The committee"], ["manager", "Building manager"], ["voting", "Any voting member"], ["system", "The portal itself"]];
+const TICK_WORDS = { ok: "Ticked", query: "Queried" };
+
+function rulesBack() { return '<a class="back" href="#/rules">← Rules</a>'; }
+
+function ruleLineHtml(r, href) {
+  const state = r.lawyer_checked && r.state === "applied" ? "In force · lawyer-checked" : (RULE_STATE[r.state] || r.state);
+  const tag = r.key.startsWith("qld_sm_") ? "QLD " + r.key.slice(7) : r.layer === "law" ? "QLD" : "Ours";
+  return `<a class="mini-row rule-line" href="${href}">
+    <span class="rl-key">${esc(tag)}</span>
+    <span class="grow"><b>${esc(r.title)}</b><span class="rl-meta">${esc(r.who)}${r.deadline_text ? " · " + esc(r.deadline_text) : ""}${r.if_missed ? " · if missed: " + esc(r.if_missed.toLowerCase()) : ""}</span></span>
+    <span class="rl-state${r.state === "draft" ? " draft-state" : ""}">${esc(state)}</span>
+  </a>`;
+}
+
+function changeRowHtml(c) {
+  const stage = c.stage_no ? `Stage ${c.stage_no} of 7` : c.stage_label;
+  return `<a class="row" href="#/rules/change/${enc(c.id)}">
+    <span class="ref">${esc(c.layer === "law" ? "Queensland law" : c.entry_label)}</span>
+    <span class="due${c.stage === "done" ? "" : " ready"}">${esc(stage)}</span>
+    <span class="title">${esc(c.title)}</span>
+    <span class="status">${esc(c.stage_label)}${c.applied_text ? " · applied " + esc(c.applied_text) : ""} · started ${esc(fmtDate(c.started))}${c.started_by ? " by " + esc(c.started_by) : ""}</span>
+  </a>`;
+}
+
+async function viewRules(t) {
+  drawLoading();
+  const r = await api(withB("/rules"));
+  if (t !== seq) return;
+  const law = (r.in_force || []).filter((x) => x.layer === "law");
+  const mine = (r.in_force || []).filter((x) => x.layer !== "law");
+  const telling = new Set((r.to_notify || []).map((c) => c.id));
+  const open = (r.changes || []).filter((c) => !["done", "cancelled"].includes(c.stage) && !telling.has(c.id));
+  const past = (r.changes || []).filter((c) => ["done", "cancelled"].includes(c.stage));
+  const sections = {};
+  law.forEach((x) => { (sections[x.section || "Other"] = sections[x.section || "Other"] || []).push(x); });
+  draw(`${takeFlash()}<div class="page-head">
+      <h1>Rules</h1>
+      <p class="link-row small">${r.can_start ? '<a href="#/rules/new">Start a change</a>' : ""}${state.me.can.aiSee ? '<a href="#/ai">CMS and by-laws</a>' : ""}</p>
+    </div>
+    <p class="lead">Every rule the portal runs, where it comes from, and every change to them. Nothing reaches residents until the lawyer (where needed) and the committee have signed.</p>
+    ${guidanceHtml()}
+    ${moduleNoteHtml(r.module_note)}
+    ${(r.to_notify || []).length ? `<section class="card"><h2>Tell people</h2>
+      <p class="muted">Applied, but nobody has been told yet.</p>
+      <div class="rows">${r.to_notify.map(changeRowHtml).join("")}</div></section>` : ""}
+    <section class="card"><h2>Changes under way</h2>
+      ${open.length ? `<div class="rows">${open.map(changeRowHtml).join("")}</div>` : '<p class="muted">None. A change starts from a resolution the committee passed, a new CMS or by-laws, or by hand.</p>'}
+    </section>
+    ${(r.motions_to_implement || []).length ? `<section class="card"><h2>Resolutions to put into the rules</h2>
+      <p class="muted">Passed by the committee and not yet turned into rules. Not every resolution needs this.</p>
+      <div class="mini-rows">${r.motions_to_implement.map((m) => `<div class="mini-row">
+        <span class="grow"><b>${esc(m.words)}</b><span class="rl-meta">Passed ${esc(m.decided_text)}</span></span>
+        ${r.can_start ? `<button type="button" class="linkbtn" data-motion="${esc(m.id)}">Start a change</button>` : ""}
+      </div>`).join("")}</div><p class="error" id="m-error" role="alert"></p></section>` : ""}
+    <section class="card"><h2>This building's rules</h2>
+      ${mine.length ? `<div class="mini-rows">${mine.map((x) => ruleLineHtml(x, "#/rules/rule/" + enc(x.key))).join("")}</div>` : '<p class="muted">None yet. They come from the CMS, the by-laws and the committee\'s resolutions.</p>'}
+    </section>
+    <section class="card"><h2>Queensland law</h2>
+      ${law.length ? `<p class="muted">${esc(r.jurisdiction)} · ${esc(r.module === "accommodation" ? "Accommodation" : "Standard")} Module · shared by every building in the state.</p>
+        ${law.some((x) => x.state === "draft") ? '<p class="draft">Loaded from the law file. Not in force in the portal until a lawyer has checked them once.</p>' : ""}
+        ${Object.entries(sections).map(([name, list]) => `<details class="law-section"><summary>${esc(name)} <span class="muted">(${esc(list.length)})</span></summary><div class="mini-rows">${list.map((x) => ruleLineHtml(x, "#/rules/rule/" + enc(x.key))).join("")}</div></details>`).join("")}`
+        : `<p class="muted">Not loaded yet.</p>${r.can_law ? '<p class="error" id="seed-error" role="alert"></p><button class="btn secondary plain" type="button" id="seed">Load the 44 Queensland committee rules</button>' : ""}`}
+    </section>
+    ${past.length ? `<section class="card"><h2>History</h2><div class="rows">${past.map(changeRowHtml).join("")}</div></section>` : ""}`);
+  $$("[data-motion]").forEach((btn) => btn.addEventListener("click", () => busy(btn, $("#m-error"), async () => {
+    const res = await api("/rules/changes", { body: { b: state.b, source_kind: "motion", source_id: btn.dataset.motion } });
+    go("#/rules/change/" + enc(res.change.id));
+  })));
+  const seed = $("#seed");
+  if (seed) seed.addEventListener("click", () => busy(seed, $("#seed-error"), async () => {
+    const res = await api("/rules/seed", { body: { b: state.b, from: "qld" } });
+    state.flash = res.change ? "Loaded as a change for the lawyer to check once." : "Linked.";
+    go(res.change ? "#/rules/change/" + enc(res.change.id) : "#/rules");
+  }));
+}
+
+async function viewRulesNew(t) {
+  drawLoading();
+  const r = await api(withB("/rules"));
+  let docs = [];
+  if (state.me.can.aiSee) { try { docs = ((await api(withB("/ai/docs"))).docs || []).filter((d) => d.usable); } catch (e) { docs = []; } }
+  if (t !== seq) return;
+  const motions = r.motions_to_implement || [];
+  draw(`${rulesBack()}<h1>Start a change</h1>
+    <p class="lead">Where does it come from? The portal splits it into items you check, then you draft the rules.</p>
+    <form id="nc" class="card" novalidate>
+      <fieldset><legend>It comes from</legend>
+        ${motions.length ? '<label class="check"><input type="radio" name="src" value="motion" checked><span>A resolution the committee passed</span></label>' : ""}
+        ${docs.length ? `<label class="check"><input type="radio" name="src" value="doc"${motions.length ? "" : " checked"}><span>A new CMS or by-laws version</span></label>` : ""}
+        <label class="check"><input type="radio" name="src" value="manual"${motions.length || docs.length ? "" : " checked"}><span>Something else: I'll write it in</span></label>
+        ${r.can_law ? '<label class="check"><input type="radio" name="src" value="law"><span>A change to the Queensland law (every building)</span></label>' : ""}
+      </fieldset>
+      <div data-src="motion"${motions.length ? "" : " hidden"}><label for="nc-motion">Which resolution?</label>
+        <select id="nc-motion">${motions.map((m) => `<option value="${esc(m.id)}">${esc(m.words.slice(0, 120))}</option>`).join("")}</select></div>
+      <div data-src="doc" hidden><label for="nc-doc">Which version?</label>
+        <select id="nc-doc">${docs.map((d) => `<option value="${esc(d.id)}">${esc(d.title)}${d.version_label ? " · " + esc(d.version_label) : ""}</option>`).join("")}</select></div>
+      <div data-src="manual law" hidden>
+        <label for="nc-title">Title</label><input id="nc-title" maxlength="255" placeholder="Bin room hours">
+        <label for="nc-items">What it says <span class="opt">(one item per line, as written)</span></label>
+        <textarea id="nc-items" rows="5"></textarea>
+      </div>
+      <label for="nc-sum">A line for the history <span class="opt">(optional)</span></label>
+      <input id="nc-sum" maxlength="500">
+      <p class="error" role="alert"></p>
+      <button class="btn block" type="submit">Start</button>
+    </form>`);
+  const f = $("#nc");
+  const pick = () => {
+    const v = ($('input[name="src"]:checked', f) || {}).value;
+    $$("[data-src]", f).forEach((d) => { d.hidden = !d.dataset.src.split(" ").includes(v); });
+  };
+  $$('input[name="src"]', f).forEach((x) => x.addEventListener("change", pick));
+  pick();
+  f.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const v = ($('input[name="src"]:checked', f) || {}).value;
+    const body = { b: state.b, summary: $("#nc-sum").value.trim() };
+    if (v === "motion") Object.assign(body, { source_kind: "motion", source_id: $("#nc-motion").value });
+    else if (v === "doc") Object.assign(body, { source_kind: "doc", source_id: $("#nc-doc").value });
+    else {
+      const items = $("#nc-items").value.split(/\n+/).map((x) => x.trim()).filter(Boolean).map((text) => ({ text }));
+      if (!items.length) { $(".error", f).textContent = "Write what it says."; return; }
+      Object.assign(body, { source_kind: "manual", title: $("#nc-title").value.trim(), items, layer: v === "law" ? "law" : "" });
+    }
+    busy($('button[type="submit"]', f), $(".error", f), async () => {
+      const res = await api("/rules/changes", { body });
+      go("#/rules/change/" + enc(res.change.id));
+    });
+  });
+}
+
+function stageListHtml(stages) {
+  return `<ol class="loop">${stages.map((s) => `<li class="${s.done ? "done" : ""}${s.current ? " on" : ""}">
+    <span class="lp-no">${String(s.no).padStart(2, "0")}</span>
+    <span class="grow"><b>${esc(s.label)}</b>
+      <span class="lp-meta">${s.done ? `${esc(s.check_label)}${s.by ? " by " + esc(s.by) : ""}${s.at ? " · " + esc(fmtDate(s.at)) : ""}${s.note ? " · " + esc(s.note) : ""}`
+        : s.current ? (s.gate.ok ? "Ready to check" : esc(s.gate.why)) : "Waiting"}</span></span>
+  </li>`).join("")}</ol>`;
+}
+
+function itemsHtml(items) {
+  return `<ol class="clauses">${items.map((i) => `<li>
+    <p class="cl-id">${esc(i.ref || i.id)}${i.mark ? `<span>${esc(MARK_WORDS[i.mark] || i.mark)}</span>` : ""}</p>
+    ${i.old_text && i.mark === "changed" ? (() => { const d = wordDiff(i.old_text, i.text); return `<div class="cc-cols"><div><p class="cc-side">Old</p><p class="cc-text">${d.old}</p></div><div><p class="cc-side">New</p><p class="cc-text">${d.new}</p></div></div>`; })()
+      : `<p class="cl-text">${lines(i.text)}</p>`}
+  </li>`).join("")}</ol>`;
+}
+
+function ruleCardHtml(r, canEdit) {
+  return `<article class="rule-card${r.problems && r.problems.length ? " has-problems" : ""}" id="rule-${esc(r.id)}">
+    <p class="label">${esc(ruleTag(r))} · version ${esc(r.version)}${r.ai_drafted ? (r.approved_by ? " · drafted by the AI, accepted by " + esc(r.approved_by) : " · drafted by the AI, not yet accepted") : ""}</p>
+    <h3>${r.retire ? "Stop applying: " : ""}${esc(r.title)}</h3>
+    <dl class="rule-facts">
+      <div><dt>When</dt><dd>${esc(r.trigger)}</dd></div>
+      <div><dt>What must happen</dt><dd>${esc(r.action)}</dd></div>
+      <div><dt>Who</dt><dd>${esc(r.who)}${r.duty_label ? ` <span class="muted">(${esc(r.duty_label)} here)</span>` : ""}</dd></div>
+      <div><dt>Deadline</dt><dd>${esc(r.deadline_text || "None stated")}</dd></div>
+      <div><dt>If it's missed</dt><dd>${esc(r.if_missed || "The source doesn't say")}</dd></div>
+    </dl>
+    ${(r.citations || []).map((c) => `<blockquote class="quote"><p class="q-head">${esc(c.source === "law" ? "Law file" : "This change")} · ${esc(c.clause)}</p><p>“${esc(c.quote)}”</p></blockquote>`).join("")}
+    ${(r.problems || []).length ? `<p class="refused">${esc(r.problems.join(" "))}</p>` : ""}
+    ${canEdit ? `<div class="prop-actions">
+      ${r.ai_drafted && !r.approved_by ? '<button type="button" class="linkbtn" data-accept>Accept</button>' : ""}
+      <button type="button" class="linkbtn quiet" data-drop>Drop it</button></div><p class="error" role="alert"></p>` : ""}
+  </article>`;
+}
+
+function ruleFormHtml(items, known) {
+  return `<form id="rf" class="sub-form act-form" novalidate>
+    <h3 class="sub">Draft a rule</h3>
+    <label for="rf-key">Which rule</label>
+    <select id="rf-key"><option value="">A new rule</option>${(known || []).filter((k) => !k.key.startsWith("qld_")).map((k) => `<option value="${esc(k.key)}">Change: ${esc(k.title)}</option>`).join("")}</select>
+    <label for="rf-title">Name</label><input id="rf-title" maxlength="255" placeholder="No bikes in the lifts">
+    <label for="rf-trigger">When <span class="opt">(what starts it)</span></label><textarea id="rf-trigger" rows="2"></textarea>
+    <label for="rf-action">What must happen</label><textarea id="rf-action" rows="3"></textarea>
+    <div class="two-fields">
+      <div><label for="rf-who">Who, in the source's words</label><input id="rf-who" maxlength="255" placeholder="Building manager"></div>
+      <div><label for="rf-duty">Who, as a position here</label><select id="rf-duty">${DUTY_CHOICES.map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select></div>
+    </div>
+    <div class="two-fields">
+      <div><label for="rf-deadline">Deadline <span class="opt">(optional)</span></label><input id="rf-deadline" maxlength="255" placeholder="14 days"></div>
+      <div><label for="rf-days">In days <span class="opt">(optional)</span></label><input id="rf-days" type="number" min="1" max="3660" inputmode="numeric"></div>
+    </div>
+    <label for="rf-missed">If it's missed <span class="opt">(only if the source says)</span></label><input id="rf-missed" maxlength="1000">
+    <label for="rf-src">Where it comes from</label>
+    <select id="rf-src">${items.map((i) => `<option value="change|${esc(i.id)}">${esc(i.ref || i.id)}</option>`).join("")}<option value="law|">The Queensland law file</option></select>
+    <label for="rf-clause" data-law hidden>Section <span class="opt">(e.g. SM s 58)</span></label><input id="rf-clause" data-law hidden maxlength="255">
+    <label for="rf-quote">The exact words it rests on</label><textarea id="rf-quote" rows="2" placeholder="Copy them from the item above"></textarea>
+    <p class="small muted">The words are checked: they must really be in the item or the law file.</p>
+    <label class="check"><input type="checkbox" id="rf-retire"><span>This rule stops applying</span></label>
+    <p class="error" role="alert"></p>
+    <div class="actions"><button class="btn secondary plain" type="submit">Save the draft</button></div>
+  </form>`;
+}
+
+const PRODUCT_EDITS = [["field", "Add a question to the form"], ["deadline", "Change the deadline"], ["step", "Change a step's instructions"]];
+
+function productFormHtml(topics, rules, impact) {
+  const first = ((impact || []).find((i) => i.kind === "topic") || {}).topic_key;
+  return `<form id="pf" class="sub-form act-form" novalidate>
+    <h3 class="sub">Draft a change to a request type</h3>
+    <label for="pf-topic">Request type</label>
+    <select id="pf-topic">${topics.map((tp) => `<option value="${esc(tp.key)}"${tp.key === first ? " selected" : ""}>${esc(tp.label)}</option>`).join("")}</select>
+    <label for="pf-kind">What changes</label>
+    <select id="pf-kind">${PRODUCT_EDITS.map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>
+    <div data-edit="field"><label for="pf-flabel">The question, as residents will read it</label><input id="pf-flabel" maxlength="200" placeholder="I won't take a bicycle in the lift">
+      <div class="two-fields"><div><label for="pf-ftype">Answer</label><select id="pf-ftype"><option value="checkbox">A tick box</option><option value="text">A short answer</option><option value="textarea">A longer answer</option><option value="date">A date</option><option value="file">A photo or PDF</option></select></div>
+      <div><label class="check field-check"><input type="checkbox" id="pf-freq" checked><span>Required</span></label></div></div></div>
+    <div data-edit="deadline" hidden><div class="two-fields"><div><label for="pf-days">Days to decide</label><input id="pf-days" type="number" min="1" max="366" inputmode="numeric"></div>
+      <div><label for="pf-outcome">If nobody decides in time</label><select id="pf-outcome"><option value="none">Nothing happens automatically</option><option value="deemed_approved">Treated as APPROVED</option><option value="not_agreed">Treated as NOT AGREED</option></select></div></div></div>
+    <div data-edit="step" hidden><label for="pf-stage">Which step</label><select id="pf-stage"></select>
+      <label for="pf-instr">New instructions</label><textarea id="pf-instr" rows="3"></textarea></div>
+    <label for="pf-title">A short title for the change</label><input id="pf-title" maxlength="255">
+    <fieldset><legend>It implements</legend>${rules.map((r) => `<label class="check"><input type="checkbox" data-rk="${esc(r.key)}" checked><span>${esc(r.title)}</span></label>`).join("")}</fieldset>
+    <p class="small muted">Checked like the AI helper's: only real settings, and the result must still work.</p>
+    <p class="error" role="alert"></p>
+    <div class="actions"><button class="btn secondary plain" type="submit">Save the draft</button></div>
+  </form>`;
+}
+
+function productCardHtml(p, canDecide) {
+  const formChanged = JSON.stringify(p.before_form) !== JSON.stringify(p.after_form);
+  return `<article class="prop${p.invalid ? " invalid" : ""}${p.status === "rejected" ? " rejected" : ""}" id="pp-${esc(p.id)}">
+    ${p.if_missed ? `<div class="prop-missed"><p class="label">If nobody decides in time</p>${p.if_missed.before ? `<p class="pm-old"><span>Now</span>${esc(p.if_missed.before)}</p>` : ""}<p class="pm-new"><span>Proposed</span>${esc(p.if_missed.after)}</p></div>` : ""}
+    <p class="label">${esc(p.topic_label)}${p.from_review ? " · from the AI's by-law review" : ""}${p.touches_residents ? " · residents will see this" : " · committee steps only"}</p>
+    <h3>${esc(p.title)}</h3>
+    ${PROP_STATUS[p.status] ? `<p class="prop-status">${esc(PROP_STATUS[p.status])}${p.decided_by ? " by " + esc(p.decided_by) : ""}${p.note ? ": " + esc(p.note) : ""}</p>` : ""}
+    ${p.why ? `<p class="prop-why">${esc(p.why)}</p>` : ""}
+    ${p.changes.length ? `<dl class="cur-prop">${p.changes.map((c) => `<div><dt>${esc(c.where)}</dt><dd><span class="was">${esc(c.old)}</span> <span aria-hidden="true">→</span><span class="sr-only">becomes</span> <b>${esc(c.new)}</b></dd></div>`).join("")}</dl>` : ""}
+    ${p.invalid ? `<p class="refused">Refused by the checker: ${esc((p.problems || []).join(" "))}</p>` : ""}
+    ${formChanged && p.after_form ? `<details class="preview-box"><summary>The form as residents will see it</summary><div class="pv">${formPreviewHtml(p.after_form, "after", p.before_form)}</div></details>` : ""}
+    ${canDecide && !p.invalid && ["proposed", "approved", "rejected"].includes(p.status) ? `<div class="prop-actions">
+      ${p.status !== "approved" ? '<button type="button" class="linkbtn" data-pd="approve">Approve</button>' : ""}
+      ${p.status !== "rejected" ? '<button type="button" class="linkbtn quiet" data-pd="reject">Reject</button>' : ""}</div>
+      <form class="prop-form" data-rj hidden novalidate><label for="pr-${esc(p.id)}">Why is it rejected?</label><input id="pr-${esc(p.id)}" maxlength="255">
+      <div class="actions"><button class="btn secondary plain" type="submit">Reject it</button></div></form>` : ""}
+    <p class="error" role="alert"></p>
+  </article>`;
+}
+
+function impactHtml(list, canRun, rules) {
+  const title = (k) => ((rules || []).find((x) => x.key === k) || {}).title || k;
+  if (!list.length) return '<p class="muted">No request type or feature is linked to these rules yet. Link one from the rule\'s page if it should change, or tick that nothing changes.</p>';
+  return `<div class="mini-rows">${list.map((i) => `<div class="mini-row impact-row" data-key="${esc(i.key)}">
+    <span class="grow"><b>${esc(i.label)}</b><span class="rl-meta">${i.kind === "feature" ? "A portal feature (code)" : "Request type"}${i.building_name && i.building_name !== state.building.name ? " · " + esc(i.building_name) : ""} · for “${esc(i.rules.map(title).join("”, “"))}”${i.note ? " · " + esc(i.note) : ""}</span></span>
+    <span class="rl-state${i.done ? "" : " todo"}">${esc(i.state)}</span>
+    ${canRun && !i.done && i.state !== "draft waiting" ? `<span class="impact-acts"><button type="button" class="linkbtn" data-imp="no_change">No change needed</button>${i.kind === "feature" ? '<button type="button" class="linkbtn" data-imp="code">Needs a code change</button>' : ""}</span>` : ""}
+    ${canRun && i.decision ? '<button type="button" class="linkbtn quiet" data-imp="">Undo</button>' : ""}
+  </div>`).join("")}</div><p class="error" id="imp-error" role="alert"></p>`;
+}
+
+function packHtml(p, latest) {
+  return `<div class="pack${latest ? "" : " old"}">
+    <p class="label">Pack ${esc(p.no)} · ${esc(p.status_label)}</p>
+    <p>${p.lawyer_name ? `To ${esc(p.lawyer_name)} (${esc(p.lawyer_email)}), sent ${esc(p.sent_text)}.` : ""} ${p.status === "signed" ? `<b>Signed off by ${esc(p.signed_name)} on ${esc(p.signed_text)}${p.signed_via === "email" ? " (by email)" : ""}.</b>` : p.expired ? "The link has expired." : `The link works until ${esc(p.expires_text)}.`}</p>
+    <p class="small muted">${esc(p.counts.ok)} ticked · ${esc(p.counts.query)} queried · ${esc(p.counts.open)} not looked at yet</p>
+    ${latest ? `<ol class="pack-items">${p.items.map((i) => `<li class="${i.tick === "query" ? "queried" : ""}">
+      <span class="grow"><span class="rl-meta">${esc(i.kind_label)}</span>${esc(i.title)}${i.comment ? `<span class="pi-comment">“${esc(i.comment)}”</span>` : ""}</span>
+      <span class="rl-state">${esc(TICK_WORDS[i.tick] || "")}</span></li>`).join("")}</ol>` : ""}
+    ${p.note ? `<p class="pi-comment">Lawyer's note: “${esc(p.note)}”</p>` : ""}
+    <p class="link-row small"><button type="button" class="linkbtn" data-pdf="${esc(p.id)}">Open the PDF</button>${p.has_reply ? `<button type="button" class="linkbtn" data-reply="${esc(p.id)}">The lawyer's reply</button>` : ""}</p>
+  </div>`;
+}
+
+function notifyHtml(plan, canSend) {
+  if (!plan) return "";
+  if (plan.status === "sent") return `<p class="okmsg">Sent ${esc(plan.sent_text)} to ${esc(plan.sent_count)} ${plan.sent_count === 1 ? "person" : "people"}${plan.channels.includes("notice") ? ", and posted on the notice board" : ""}.</p>`;
+  const groups = {};
+  plan.candidates.forEach((c) => { (groups[c.groups] = groups[c.groups] || []).push(c); });
+  return `<div class="notify">
+    <h3 class="sub">Who needs to know</h3>
+    <ul class="why-list">${plan.groups.map((g) => `<li><b>${esc(g.label)}</b> — ${esc(g.why)}</li>`).join("")}</ul>
+    <form id="nf" novalidate>
+      <fieldset><legend>How</legend>
+        <label class="check"><input type="checkbox" data-ch="email"${plan.channels.includes("email") ? " checked" : ""}><span>Email</span></label>
+        <label class="check"><input type="checkbox" data-ch="push"${plan.channels.includes("push") ? " checked" : ""}><span>Phone alert (for people who turned them on)</span></label>
+        <label class="check"><input type="checkbox" data-ch="notice"${plan.channels.includes("notice") ? " checked" : ""}><span>Post on the notice board</span></label>
+      </fieldset>
+      <label for="nf-aud">Notice board post is for</label>
+      <select id="nf-aud"><option value="owners"${plan.notice_audience === "owners" ? " selected" : ""}>Owners</option><option value="all"${plan.notice_audience === "all" ? " selected" : ""}>Everyone</option></select>
+      <label for="nf-subject">Subject</label><input id="nf-subject" maxlength="255" value="${esc(plan.subject)}">
+      <label for="nf-body">The words</label><textarea id="nf-body" rows="8">${esc(plan.body)}</textarea>
+      <fieldset class="people"><legend>The people <span class="opt" id="nf-count">(${esc(plan.count)} ticked)</span></legend>
+        ${Object.entries(groups).map(([g, list]) => `<p class="label">${esc(g)}</p>${list.map((c) => `<label class="check"><input type="checkbox" data-uid="${esc(c.user_id)}"${c.ticked ? " checked" : ""}><span>${esc(c.name || c.email)} <span class="muted small">${esc(c.email)}</span></span></label>`).join("")}`).join("")}
+      </fieldset>
+      <p class="error" role="alert"></p>
+      ${canSend ? `<div class="actions"><button class="btn secondary plain" type="submit">Save the list and the words</button>${plan.status === "approved" ? `<button class="btn" type="button" id="nf-send">Send to ${esc(plan.count)} ${plan.count === 1 ? "person" : "people"}</button>` : ""}</div>` : ""}
+      ${plan.status === "approved" ? `<p class="small muted">Saved${plan.approved_by ? " by " + esc(plan.approved_by) : ""}. Send goes to exactly this list.</p>` : ""}
+    </form></div>`;
+}
+
+async function viewChange(t, rawId) {
+  const id = decodeURIComponent(rawId);
+  drawLoading();
+  const r = await api(withB("/rules/change", { id }));
+  if (t !== seq) return;
+  const c = r.change;
+  const can = r.can || {};
+  const stage = c.stage;
+  const cur = (r.stages || []).find((s) => s.current) || {};
+  const latestPack = (r.packs || [])[r.packs.length - 1];
+  const liveRules = r.rules || [];
+  let panel = "";
+  if (stage === "read") {
+    panel = `<h2>01 · Read the source</h2>
+      <p>${esc(c.source_label)}. Check each item says what the source says.</p>${itemsHtml(r.items)}
+      ${can.run ? checkFormHtml("read", "Read correctly", cur.gate) : ""}`;
+  } else if (stage === "rules") {
+    panel = `<h2>02 · Draft the rules</h2>
+      <p>Each rule: when it starts, what must happen, who does it, the deadline and what happens if it's missed, with the exact words it rests on.</p>
+      <details><summary>The items (${esc(r.items.length)})</summary>${itemsHtml(r.items)}</details>
+      ${liveRules.length ? liveRules.map((x) => ruleCardHtml(x, can.run)).join("") : '<p class="muted">No rule drafted yet.</p>'}
+      ${can.ai_draft ? '<p class="link-row"><button type="button" class="linkbtn" id="ai-draft">Ask the AI to draft them</button></p><p class="error" id="ai-error" role="alert"></p><div id="ai-out"></div>' : ""}
+      ${can.run ? (liveRules.length ? `<details class="more-form"><summary>Draft another rule</summary>${ruleFormHtml(r.items, r.known_rules)}</details>` : ruleFormHtml(r.items, r.known_rules)) + checkFormHtml("rules", "Rules drafted", cur.gate, true) : ""}`;
+  } else if (stage === "impact") {
+    panel = `<h2>03 · Find what it changes</h2>
+      <p>Every form, step, email and date linked to these rules. Each needs a decision.</p>
+      ${impactHtml(r.impact, can.run, liveRules)}
+      ${(r.proposals || []).length ? `<h3 class="sub">Drafted changes</h3>${r.proposals.map((p) => productCardHtml(p, can.run)).join("")}` : ""}
+      ${can.run ? ((r.proposals || []).length ? `<details class="more-form"><summary>Draft another change to a request type</summary>${productFormHtml(r.topics, liveRules, r.impact)}</details>` : productFormHtml(r.topics, liveRules, r.impact)) : ""}
+      <div class="lawyer-line"><p class="label">The lawyer</p><p>${c.needs_lawyer ? "Needed. " : "Not needed. "}${esc(c.lawyer_why)}</p>
+        ${!c.needs_lawyer && can.force_lawyer ? `<button type="button" class="linkbtn" id="force">${c.lawyer_forced ? "Don't ask the lawyer" : "Ask the lawyer anyway"}</button>` : ""}</div>
+      ${can.run ? checkFormHtml("impact", "Impact checked", cur.gate) : ""}`;
+  } else if (stage === "legal") {
+    const live = latestPack && ["sent", "queried"].includes(latestPack.status);
+    panel = `<h2>04 · The lawyer checks</h2>
+      <p>${esc(c.lawyer_why)} One pack for the whole change, so the lawyer is billed once: every rule's wording and every form as residents will see it.</p>
+      ${(r.packs || []).slice().reverse().map((p, i) => packHtml(p, i === 0)).join("")}
+      ${can.run && !live ? `<form id="send" class="sub-form act-form" novalidate><h3 class="sub">${latestPack ? "Send a new pack" : "Send the pack"}</h3>
+        <div class="two-fields"><div><label for="sd-name">Lawyer's name</label><input id="sd-name" maxlength="255" value="${esc(latestPack ? latestPack.lawyer_name : "")}"></div>
+        <div><label for="sd-email">Lawyer's email</label><input id="sd-email" type="email" maxlength="255" value="${esc(latestPack ? latestPack.lawyer_email : "")}"></div></div>
+        <p class="small muted">They get an email with the PDF attached and a private link (no sign-in) where they tick or query each item and sign off. The link lasts 30 days.</p>
+        <p class="error" role="alert"></p><div class="actions"><button class="btn" type="submit">Send to the lawyer</button></div></form>` : ""}
+      ${can.run && live ? `<p class="link-row small"><button type="button" class="linkbtn" id="relink">Send a new link</button>${latestPack.status === "queried" || latestPack.counts.query ? '<button type="button" class="linkbtn" data-reopen="rules">Go back to the rules</button><button type="button" class="linkbtn" data-reopen="impact">Go back to the forms</button>' : ""}</p><p class="error" id="pk-error" role="alert"></p><div id="link-out"></div>
+        <details class="sub-form"><summary>The lawyer replied by email instead</summary><form id="es" novalidate>
+          <div class="two-fields"><div><label for="es-name">Lawyer's name</label><input id="es-name" maxlength="255" value="${esc(latestPack.lawyer_name)}"></div>
+          <div><label for="es-date">Date of their email</label><input id="es-date" type="date"></div></div>
+          <label for="es-file">Their reply <span class="opt">(a PDF of the email, or a photo)</span></label><input id="es-file" type="file" accept="application/pdf,image/*">
+          <p class="error" role="alert"></p><div class="actions"><button class="btn secondary plain" type="submit">Record: signed off by email</button></div></form></details>` : ""}`;
+  } else if (stage === "committee") {
+    panel = `<h2>05 · The committee signs off</h2>
+      ${latestPack && latestPack.status === "signed" ? `<p>The lawyer, ${esc(latestPack.signed_name)}, signed off on ${esc(latestPack.signed_text)}.</p>` : `<p>${esc(c.lawyer_why)}</p>`}
+      <p>${can.sign ? "You sign for the committee." : "Signed by the chair (Committee → Who does what)."}</p>
+      ${can.sign ? '<p class="error" id="so-error" role="alert"></p><button class="btn" type="button" id="signoff">Sign off for the committee</button>' : ""}
+      ${!c.needs_lawyer && can.force_lawyer ? '<p class="link-row small"><button type="button" class="linkbtn" id="force">Ask the lawyer first</button></p>' : ""}`;
+  } else if (stage === "apply") {
+    panel = `<h2>06 · Apply from a date</h2>
+      <p>The rules and the changed forms start on this date. Requests already lodged keep the rules they were lodged under.</p>
+      ${can.run ? `<form id="ap" class="inline-form" novalidate><label for="ap-date">Start date <span class="opt">(empty: ${c.source_kind === "doc" ? "the registration date" : c.source_kind === "motion" ? "once the 7-day objection window has passed, or today" : "today"})</span></label>
+        <input id="ap-date" type="date"><p class="error" role="alert"></p><button class="btn" type="submit">Apply</button></form>` : ""}`;
+  } else if (stage === "notify") {
+    panel = `<h2>07 · Tell the right people</h2>
+      <p>Applied${c.effective_text ? ", in force from " + esc(c.effective_text) : ""}. Check who gets told, and how, then send.</p>
+      ${notifyHtml(r.notify, can.run)}`;
+  } else if (stage === "done") {
+    panel = `<h2>Done</h2><p>Applied${c.effective_text ? ", in force from " + esc(c.effective_text) : ""}. It's on the next committee meeting's agenda under "Rules changed since the last meeting".</p>
+      ${r.notify ? notifyHtml(r.notify, false) : ""}
+      ${liveRules.length ? `<div class="mini-rows">${liveRules.map((x) => ruleLineHtml(x, "#/rules/rule/" + enc(x.key))).join("")}</div>` : ""}`;
+  } else {
+    panel = "<h2>Cancelled</h2><p>Nothing in it was applied.</p>";
+  }
+  draw(`${takeFlash()}${rulesBack()}
+    <h1>${esc(c.title)}</h1>
+    <p class="meta-line">${esc(c.layer === "law" ? "Queensland law (every building)" : c.source_kind === "motion" ? "A resolution the committee passed" : c.source_label)} · started ${esc(fmtDate(c.started))}${c.started_by ? " by " + esc(c.started_by) : ""}</p>
+    ${c.summary ? `<p class="lead">${esc(c.summary)}</p>` : ""}
+    ${guidanceHtml()}
+    <div class="change-grid">
+      <aside>${stageListHtml(r.stages || [])}</aside>
+      <section class="card stage-panel">${panel}</section>
+    </div>
+    ${can.run && !["done", "cancelled"].includes(stage) && !(r.stages || []).find((s) => s.key === "apply" && s.done) ? '<p class="link-row small"><button type="button" class="btn danger" id="cancel">Cancel this change</button></p><p class="error" id="cx-error" role="alert"></p>' : ""}`);
+  wireChange(id, r);
+}
+
+function checkFormHtml(stage, label, gate, withNote) {
+  return `<form class="check-form" data-check="${stage}" novalidate>
+    ${withNote ? `<label for="ck-${stage}">Note <span class="opt">(needed if no rule changes)</span></label><input id="ck-${stage}" maxlength="500">` : ""}
+    ${gate && !gate.ok ? `<p class="draft">${esc(gate.why)}</p>` : ""}
+    <p class="error" role="alert"></p>
+    <button class="btn" type="submit">${esc(label)}</button>
+  </form>`;
+}
+
+function wireChange(id, r) {
+  const after = (msg) => { if (msg) state.flash = msg; route(); };
+  const post = (path, body) => api(path, { body: Object.assign({ b: state.b, id }, body) });
+  $$(".check-form").forEach((f) => f.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const note = $("input", f) ? $("input", f).value.trim() : "";
+    busy($('button[type="submit"]', f), $(".error", f), async () => { await post("/rules/change/check", { stage: f.dataset.check, note }); after("Checked."); });
+  }));
+  $$(".rule-card").forEach((card) => {
+    const rid = card.id.slice(5);
+    const err = $(".error", card);
+    const acc = $("[data-accept]", card);
+    if (acc) acc.addEventListener("click", () => busy(acc, err, async () => { await post("/rules/change/rule/accept", { rule_id: rid }); after("Accepted."); }));
+    const drop = $("[data-drop]", card);
+    if (drop) confirmTap(drop, "Tap again to drop it", () => busy(drop, err, async () => { await post("/rules/change/rule", { remove: rid }); after("Dropped."); }));
+  });
+  const rf = $("#rf");
+  if (rf) {
+    const src = $("#rf-src");
+    const syncSrc = () => { $$("[data-law]", rf).forEach((el) => { el.hidden = !src.value.startsWith("law|"); }); };
+    src.addEventListener("change", syncSrc);
+    syncSrc();
+    rf.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const [source, item] = src.value.split("|");
+      const body = {
+        rule_key: $("#rf-key").value, title: $("#rf-title").value.trim(), trigger: $("#rf-trigger").value.trim(),
+        action: $("#rf-action").value.trim(), who: $("#rf-who").value.trim(), duty: $("#rf-duty").value,
+        deadline_text: $("#rf-deadline").value.trim(), deadline_days: $("#rf-days").value, if_missed: $("#rf-missed").value.trim(),
+        retire: $("#rf-retire").checked,
+        citations: [{ source, clause: source === "law" ? $("#rf-clause").value.trim() : item, quote: $("#rf-quote").value.trim() }],
+      };
+      busy($('button[type="submit"]', rf), $(".error", rf), async () => { await post("/rules/change/rule", body); after("Draft saved."); });
+    });
+  }
+  const aiBtn = $("#ai-draft");
+  if (aiBtn) aiBtn.addEventListener("click", () => busy(aiBtn, $("#ai-error"), async () => {
+    const res = await post("/rules/change/ai-draft", {});
+    state.flash = `The AI drafted ${res.ai.made} rule${res.ai.made === 1 ? "" : "s"}. Accept each one you agree with.${res.ai.refused.length ? ` ${res.ai.refused.length} more were refused by the checker.` : ""}`;
+    route();
+  }));
+  const pf = $("#pf");
+  if (pf) {
+    const topics = r.topics || [];
+    const sync = () => {
+      const kind = $("#pf-kind").value;
+      $$("[data-edit]", pf).forEach((d) => { d.hidden = d.dataset.edit !== kind; });
+      const tp = topics.find((x) => x.key === $("#pf-topic").value) || {};
+      $("#pf-stage").innerHTML = (tp.stages || []).map((s) => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join("");
+      const d = tp.deadline || {};
+      if (kind === "deadline") { $("#pf-days").value = d.days || ""; $("#pf-outcome").value = d.outcome || "none"; }
+    };
+    $("#pf-kind").addEventListener("change", sync);
+    $("#pf-topic").addEventListener("change", sync);
+    sync();
+    pf.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const err = $(".error", pf);
+      const kind = $("#pf-kind").value;
+      const topic = topics.find((x) => x.key === $("#pf-topic").value) || {};
+      let changes = [];
+      let title = $("#pf-title").value.trim();
+      if (kind === "field") {
+        const label = $("#pf-flabel").value.trim();
+        if (!label) { err.textContent = "Write the question."; return; }
+        const key = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "question";
+        changes = [{ path: "fields[+]", op: "add", value: { key, label, type: $("#pf-ftype").value, required: $("#pf-freq").checked } }];
+        title = title || "Ask: " + label;
+      } else if (kind === "deadline") {
+        const days = Number($("#pf-days").value);
+        if (!days) { err.textContent = "How many days?"; return; }
+        const before = topic.deadline || {};
+        changes = [{ path: before.days ? "deadline.days" : "deadline", op: "set", value: before.days ? days : { days, outcome: $("#pf-outcome").value } }];
+        if (before.days) changes.push({ path: "deadline.outcome", op: "set", value: $("#pf-outcome").value });
+        title = title || `Decide within ${days} days`;
+      } else {
+        const text = $("#pf-instr").value.trim();
+        if (!text) { err.textContent = "Write the new instructions."; return; }
+        changes = [{ path: `stages[key=${$("#pf-stage").value}].instructions`, op: "set", value: text }];
+        title = title || "New instructions for a step";
+      }
+      const keys = $$("[data-rk]", pf).filter((x) => x.checked).map((x) => x.dataset.rk);
+      busy($('button[type="submit"]', pf), err, async () => {
+        await post("/rules/change/product", { topic_key: topic.key, kind: "edit_topic", title, rule_keys: keys, changes });
+        after("Draft saved. Approve it when it's right.");
+      });
+    });
+  }
+  $$(".prop[id^='pp-']").forEach((card) => {
+    const pid = card.id.slice(3);
+    const err = card.querySelector(":scope > .error");
+    $$("[data-pd]", card).forEach((btn) => btn.addEventListener("click", () => {
+      if (btn.dataset.pd === "approve") { busy(btn, err, async () => { await post("/rules/change/product/decide", { proposal_id: pid, decision: "approve" }); after("Approved."); }); return; }
+      $("[data-rj]", card).hidden = false;
+    }));
+    const rj = $("[data-rj]", card);
+    if (rj) rj.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const note = $("input", rj).value.trim();
+      if (!note) { err.textContent = "Say briefly why."; return; }
+      busy($("button", rj), err, async () => { await post("/rules/change/product/decide", { proposal_id: pid, decision: "reject", note }); after("Rejected."); });
+    });
+  });
+  $$(".impact-row").forEach((row) => $$("[data-imp]", row).forEach((btn) => btn.addEventListener("click", () => {
+    const decision = btn.dataset.imp;
+    const note = decision ? window.prompt(decision === "code" ? "What needs changing in the code?" : "Why doesn't it need to change?") : "";
+    if (decision && !note) return;
+    busy(btn, $("#imp-error"), async () => { await post("/rules/change/impact", { key: row.dataset.key, decision, note }); after(); });
+  })));
+  const force = $("#force");
+  if (force) force.addEventListener("click", () => busy(force, null, async () => {
+    await post("/rules/change/lawyer", { force: !r.change.lawyer_forced });
+    after(r.change.lawyer_forced ? "The lawyer won't be asked." : "The lawyer will be asked.");
+  }));
+  const send = $("#send");
+  if (send) send.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    busy($('button[type="submit"]', send), $(".error", send), async () => {
+      const res = await post("/rules/pack/send", { lawyer_name: $("#sd-name").value.trim(), lawyer_email: $("#sd-email").value.trim() });
+      state.flash = res.emailed ? "Sent to the lawyer, with the PDF and the link." : "The pack is ready, but the email didn't go yet (it will be retried). Copy the link from the pack.";
+      state.packLink = res.link || "";
+      route();
+    });
+  });
+  if (state.packLink && $("#link-out")) {
+    $("#link-out").innerHTML = `<p class="small">The lawyer's link (shown once): <span class="email">${esc(state.packLink)}</span></p>`;
+    state.packLink = "";
+  }
+  const relink = $("#relink");
+  if (relink) relink.addEventListener("click", () => busy(relink, $("#pk-error"), async () => {
+    const res = await api("/rules/pack/relink", { body: { b: state.b, pack_id: r.packs[r.packs.length - 1].id } });
+    state.packLink = res.link || "";
+    after("A new link went to the lawyer. The old one no longer works.");
+  }));
+  $$("[data-reopen]").forEach((btn) => btn.addEventListener("click", () => busy(btn, $("#pk-error"), async () => {
+    await post("/rules/change/reopen", { to: btn.dataset.reopen });
+    after("Back to drafting. Send a new pack when it's fixed.");
+  })));
+  $$("[data-pdf]").forEach((btn) => btn.addEventListener("click", () => busy(btn, null, async () => {
+    saveBlob(await fetchBlob(withB("/rules/pack/pdf", { pack_id: btn.dataset.pdf })), "legal-pack.pdf");
+  })));
+  $$("[data-reply]").forEach((btn) => btn.addEventListener("click", () => busy(btn, null, async () => {
+    saveBlob(await fetchBlob(withB("/rules/pack/reply", { pack_id: btn.dataset.reply })), "lawyer-reply");
+  })));
+  const es = $("#es");
+  if (es) es.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const file = $("#es-file").files[0];
+    if (!file) { $(".error", es).textContent = "Attach their reply."; return; }
+    busy($('button[type="submit"]', es), $(".error", es), async () => {
+      const data = await readBase64(file);
+      await api("/rules/pack/email-signoff", { body: { b: state.b, pack_id: r.packs[r.packs.length - 1].id, name: $("#es-name").value.trim(), date: $("#es-date").value, file: { name: file.name, data } } });
+      after("Recorded: signed off by email.");
+    });
+  });
+  const so = $("#signoff");
+  if (so) so.addEventListener("click", () => busy(so, $("#so-error"), async () => { await post("/rules/change/signoff", {}); after("Signed off for the committee."); }));
+  const ap = $("#ap");
+  if (ap) ap.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    busy($('button[type="submit"]', ap), $(".error", ap), async () => { await post("/rules/change/apply", { effective_from: $("#ap-date").value }); after("Applied. Now tell the right people."); });
+  });
+  const nf = $("#nf");
+  if (nf) {
+    const count = () => { $("#nf-count").textContent = `(${$$("[data-uid]", nf).filter((x) => x.checked).length} ticked)`; };
+    $$("[data-uid]", nf).forEach((x) => x.addEventListener("change", count));
+    nf.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const body = {
+        recipients: $$("[data-uid]", nf).filter((x) => x.checked).map((x) => x.dataset.uid),
+        channels: $$("[data-ch]", nf).filter((x) => x.checked).map((x) => x.dataset.ch),
+        subject: $("#nf-subject").value.trim(), body: $("#nf-body").value.trim(), notice_audience: $("#nf-aud").value,
+      };
+      busy($('button[type="submit"]', nf), $(".error", nf), async () => { await post("/rules/notify", body); after("Saved. Check it once more, then send."); });
+    });
+    const sendBtn = $("#nf-send");
+    if (sendBtn) confirmTap(sendBtn, "Tap again to send", () => busy(sendBtn, $(".error", nf), async () => { await post("/rules/notify/send", {}); after("Sent."); }));
+  }
+  const cancel = $("#cancel");
+  if (cancel) confirmTap(cancel, "Tap again to cancel it", () => busy(cancel, $("#cx-error"), async () => { await post("/rules/change/cancel", {}); after("Cancelled."); }));
+}
+
+async function viewRule(t, rawKey) {
+  const key = decodeURIComponent(rawKey);
+  drawLoading();
+  const r = await api(withB("/rules/rule", { key }));
+  if (t !== seq) return;
+  const x = r.rule;
+  draw(`${takeFlash()}${rulesBack()}
+    <p class="label">${esc(ruleTag(x))}${x.section ? " · " + esc(x.section) : ""}</p>
+    <h1>${esc(x.title)}</h1>
+    ${guidanceHtml()}
+    <dl class="facts">
+      <div><dt>State</dt><dd>${esc(x.state === "applied" ? (x.lawyer_checked ? "In force, lawyer-checked" : "In force") : RULE_STATE[x.state] || x.state)}${x.effective_text ? " · from " + esc(x.effective_text) : ""}</dd></div>
+      <div><dt>When</dt><dd>${esc(x.trigger)}</dd></div>
+      <div><dt>What must happen</dt><dd>${esc(x.action)}</dd></div>
+      <div><dt>Who</dt><dd>${esc(x.who)}${x.duty_label ? ` (${esc(x.duty_label)} here)` : ""}</dd></div>
+      <div><dt>Deadline</dt><dd>${esc(x.deadline_text || "None stated")}</dd></div>
+      <div><dt>If missed</dt><dd>${esc(x.if_missed || "The source doesn't say")}</dd></div>
+    </dl>
+    <section class="card spaced"><h2>Where it comes from</h2>
+      ${(x.citations || []).map((c) => `<blockquote class="quote"><p class="q-head">${esc(c.source === "law" ? "Law file" : "Its change")} · ${esc(c.clause)}</p><p>“${esc(c.quote)}”</p></blockquote>`).join("")}
+      ${x.change_id ? `<p class="link-row small"><a href="#/rules/change/${enc(x.change_id)}">The change it came in with</a></p>` : ""}
+    </section>
+    <section class="card"><h2>What it runs here</h2>
+      ${(r.links || []).length ? `<div class="mini-rows">${r.links.map((l) => `<div class="mini-row"><span class="grow"><b>${esc(l.label)}</b><span class="rl-meta">${l.kind === "feature" ? "Portal feature (code)" : "Request type"}${l.note ? " · " + esc(l.note) : ""}</span></span>${r.can_link ? `<button type="button" class="linkbtn quiet" data-unlink="${esc(l.id)}">Unlink</button>` : ""}</div>`).join("")}</div>` : '<p class="muted">Nothing linked yet.</p>'}
+      ${r.can_link ? `<form id="lk" class="sub-form" novalidate><h3 class="sub">Link a request type or feature</h3>
+        <div class="two-fields"><div><label for="lk-topic">Which</label><select id="lk-topic">${r.topics.map((tp) => `<option value="topic|${esc(tp.key)}">${esc(tp.label)}</option>`).join("")}${r.features.map((f) => `<option value="feature|${esc(f.key)}">Feature: ${esc(f.label)}</option>`).join("")}</select></div>
+        <div><label for="lk-part">Which part</label><select id="lk-part"></select></div></div>
+        <p class="error" role="alert"></p><button class="btn secondary plain" type="submit">Link it</button></form>` : ""}
+    </section>
+    <section class="card"><h2>Versions</h2><ol class="versions">${r.versions.map((v) => `<li class="ver"><p class="ver-head"><b>Version ${esc(v.version)}</b> · ${esc(RULE_STATE[v.state] || v.state)}${v.version === r.in_force_version ? " · in force" : ""}</p>
+      <p class="small muted">${v.effective_text ? "From " + esc(v.effective_text) : "Not applied"}${v.lawyer_checked ? " · lawyer-checked" : ""}${v.change_id ? ` · <a href="#/rules/change/${enc(v.change_id)}">its change</a>` : ""}</p></li>`).join("")}</ol></section>`);
+  const lk = $("#lk");
+  if (lk) {
+    const parts = () => {
+      const [kind, k] = $("#lk-topic").value.split("|");
+      const tp = r.topics.find((x2) => x2.key === k);
+      const opts = kind === "feature" ? [["", "The whole feature"]]
+        : [["fields", "Its form"], ["deadline", "Its deadline"], ["vote", "Its vote rules"]].concat(((tp || {}).stages || []).map((s) => [`stages[key=${s.key}]`, "Step: " + s.label]));
+      $("#lk-part").innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join("");
+    };
+    $("#lk-topic").addEventListener("change", parts);
+    parts();
+    lk.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const [kind, k] = $("#lk-topic").value.split("|");
+      busy($("button", lk), $(".error", lk), async () => {
+        await api("/rules/links", { body: { b: state.b, rule_key: key, product_kind: kind, topic_key: kind === "topic" ? k : "", product_path: kind === "topic" ? $("#lk-part").value : k } });
+        state.flash = "Linked.";
+        route();
+      });
+    });
+  }
+  $$("[data-unlink]").forEach((btn) => confirmTap(btn, "Tap again", () => busy(btn, null, async () => {
+    await api("/rules/links", { body: { b: state.b, rule_key: key, remove: btn.dataset.unlink } });
+    route();
+  })));
 }
 
 // ------------------------------------------------------------------ home-screen app and phone notifications

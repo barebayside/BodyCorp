@@ -68,7 +68,7 @@ REVIEW_LABELS = {"mapping": "Comparing (step 1 of 2)", "proposing": "Drafting pr
                  "ready": "Ready to review", "voting": "Committee vote open", "applied": "Applied",
                  "failed": "Didn't finish", "cancelled": "Cancelled"}
 SOURCE_LABELS = {"baseline": "Before the AI helper", "ai_review": "From a document review", "admin": "Edited by an admin",
-                 "seed": "Set-up update", "undo": "Undo"}
+                 "seed": "Set-up update", "undo": "Undo", "rules_change": "From a rules change"}
 RUNNING = ("mapping", "proposing", "voting")
 MAX_QUESTION = 2000
 MAX_TEXT = 1000000
@@ -1089,6 +1089,10 @@ def post_apply(c):
     row = _review(db, building, c.get("id"))
     if row.get("Status") != "ready":
         raise bad("This review can't be applied now ({}).".format(REVIEW_LABELS.get(row.get("Status"), "")))
+    for change in db.find(store.CHANGES, {"Building_Id": int(building["id"])}):
+        if str(change.get("Review_Id") or "") == str(row["ROWID"]) and change.get("Stage") not in ("cancelled",):
+            raise bad("This review is part of rules change \"{}\": it applies there, once the lawyer and the "
+                      "committee have signed off.".format(change.get("Title")))
     props = _proposals(db, row["ROWID"])
     approved = _appliable(props)
     if not approved:

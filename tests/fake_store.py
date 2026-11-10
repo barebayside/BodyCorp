@@ -82,10 +82,13 @@ class FakeDb:
     def delete_file(self, key):
         self.files.pop(key, None)
 
-    def deliver(self, to, subject, html, bcc=None):
+    def deliver(self, to, subject, html, bcc=None, attachments=None):
         if self.mail_error:
             return self.mail_error
-        self.outbox.append({"to": list(to), "subject": subject, "html": html, "bcc": list(bcc or [])})
+        mail = {"to": list(to), "subject": subject, "html": html, "bcc": list(bcc or [])}
+        if attachments:
+            mail["attachments"] = [(name, data) for name, data in attachments]
+        self.outbox.append(mail)
         return None
 
     def send_mail(self, to, subject, html, bcc=None):

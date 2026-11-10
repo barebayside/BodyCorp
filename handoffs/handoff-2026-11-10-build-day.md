@@ -60,3 +60,11 @@ ai-compliance-helper, five-features, rules-loop), `docs/design/*`, `docs/complia
 ## Quick Context for Next Session
 Open `NEXT.md` (item 00 = live go-live steps). Start with: finish the jobs deploy +
 disable test crons, verify the domain + SSL, deploy the new landing page to live, then the go-live check.
+
+## Added at session end
+- **Pricing research DONE:** `C:\Users\User\research_notes\Strata online application tracking software\pricing_competitors.md`.
+  Suggested: 48-lot self-managed ~A$129/mo ex GST (range $99–149, ~$2.70/lot); strata-manager resale A$0.75–1.25/lot/mo.
+  QLD managers charge ~$255/lot/yr base (48 lots ≈ $12–16k/yr). Edward to decide.
+- **Hand-over to the body corporate manager** (Edward 11-10): the committee is the user; jobs (insurance claim,
+  notice, levy query, records request, contractor) go to the manager as packs carrying the deadline; a manager
+  inbox across buildings. Open: per-job email link vs the manager's own sign-in. Ask Michael: self-managed or a paid manager?
